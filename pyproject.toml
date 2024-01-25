@@ -1,0 +1,18 @@
+[project]
+name = "videobookmarks"
+version = "1.0.0"
+description = "Tag videos at specific timestamps for easy reference"
+dependencies = [
+    "flask",
+]
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["videobookmarks"]

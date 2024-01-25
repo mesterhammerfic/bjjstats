@@ -22,7 +22,13 @@ def upgrade() -> None:
         """
         CREATE TABLE athlete (
             id SERIAL PRIMARY KEY,
-            name VARCHAR NOT NULL
+            name VARCHAR NOT NULL,
+            nickname VARCHAR
+        );
+        CREATE TABLE url (
+            id SERIAL PRIMARY KEY,
+            url VARCHAR NOT NULL,
+            athlete_id INT REFERENCES athlete(id) ON DELETE CASCADE
         );
         CREATE TABLE match (
             id SERIAL PRIMARY KEY,
@@ -32,8 +38,8 @@ def upgrade() -> None:
         );
         CREATE TABLE performance (
             id SERIAL PRIMARY KEY,
-            athlete_id REFERENCES athlete(id) ON DELETE CASCADE, 
-            match_id REFERENCES match(id) ON DELETE CASCADE,
+            athlete_id INT REFERENCES athlete(id) ON DELETE CASCADE, 
+            match_id INT REFERENCES match(id) ON DELETE CASCADE,
             result VARCHAR
         );
         """
@@ -43,9 +49,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         """
-        DROP TABLE athlete;
-        DROP TABLE match;
-        
+        DROP TABLE athlete CASCADE;
+        DROP TABLE url CASCADE;
+        DROP TABLE match CASCADE;
+        DROP TABLE performance CASCADE;
         """
 
     )
