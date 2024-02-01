@@ -24,9 +24,10 @@ do`python3 -m pip install .` for setup
 
 `performance` Each athlete has 1 performance for each match they participated in.
 
-| field  | meaning       |
-|--------|---------------|
-| result | Win/Loss/Draw |
+| field  | meaning                     |
+|--------|-----------------------------|
+| result | Win/Loss/Draw               |
+
 
 `match` One entry per match, each match is linked to two performances, 
 one performance from each athlete participating in the match
@@ -36,6 +37,8 @@ one performance from each athlete participating in the match
 | year        | integer                                                              |
 | competition | the name of the promotion (eg ADCC, IBJJF Worlds, IBJJF Euros, AIGA) |
 | method      | how the match was won (eg. armbar, points (2-0), DQ)                 |
+| stage       | the stage of the tournament eg quarterfinals, semifinals, finals     |
+| weight      | the official weight class of the match                               |
 
 
 

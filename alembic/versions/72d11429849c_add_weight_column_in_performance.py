@@ -21,7 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         """
-        ALTER TABLE performance 
+        ALTER TABLE match 
         ADD COLUMN weight VARCHAR;
         """
     )
@@ -30,7 +30,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         """
-        ALTER TABLE performance
+        ALTER TABLE match
         DROP COLUMN weight;
         """
     )
