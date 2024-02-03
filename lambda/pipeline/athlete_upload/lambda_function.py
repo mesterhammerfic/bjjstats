@@ -1,7 +1,4 @@
-import typing
 import os
-import pprint
-import dataclasses
 
 import psycopg2
 
