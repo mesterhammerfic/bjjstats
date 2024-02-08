@@ -1,6 +1,9 @@
 # bjjstats
 WIP web app to allow users to visualize and explore bjj competitors records quickly and easily.
 
+## Architecture
+![Alt text](img/bjjstats-system-design.png)
+
 ## Quickstart Pre-Reqs
 
  - clone the repository locally
