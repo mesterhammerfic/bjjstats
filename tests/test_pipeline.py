@@ -1,4 +1,3 @@
-# this is a pytest file to test the pipeline.py file
 import os
 
 import pytest
