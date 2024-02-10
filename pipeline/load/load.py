@@ -11,6 +11,8 @@ import sqlalchemy as sa
 import os
 import sys
 
+CHUNKSIZE = 1000
+
 def upload_data(
         athlete_df: pd.DataFrame,
         performance_df: pd.DataFrame,
@@ -29,21 +31,42 @@ def upload_data(
         print("deleting existing data")
         statement = sa.text("DELETE FROM athlete;")
         con.execute(statement)
+        con.commit()
         statement = sa.text("DELETE FROM performance;")
         con.execute(statement)
+        con.commit()
         statement = sa.text("DELETE FROM match;")
         con.execute(statement)
         con.commit()
 
-    print("uploading athlete data")
-    athlete_df.to_sql("athlete", engine, if_exists="append", index=False)
-
-    print("uploading match data")
-    match_df.to_sql("match", engine, if_exists="append", index=False)
-
-    print("uploading performance data")
-    performance_df.to_sql("performance", engine, if_exists="append", index=False)
-    print("upload complete")
+        print("uploading athlete data")
+        athlete_df.to_sql(
+            "athlete",
+            engine,
+            if_exists="append",
+            index=False,
+            method="multi",
+            chunksize=CHUNKSIZE,
+        )
+        print("uploading match data")
+        match_df.to_sql(
+            "match",
+            engine,
+            if_exists="append",
+            index=False,
+            method="multi",
+            chunksize=CHUNKSIZE,
+        )
+        print("uploading performance data")
+        performance_df.to_sql(
+            "performance",
+            engine,
+            if_exists="append",
+            index=False,
+            method="multi",
+            chunksize=CHUNKSIZE,
+        )
+        print("upload complete")
 
 
 def upload_from_s3(
@@ -83,16 +106,17 @@ def lambda_handler(event, context):
 
 
 if __name__ == "__main__":
+    DB_URL = os.getenv("DB_URL")
+    if DB_URL is None:
+        raise Exception("You must set the DB_URL environment variable")
+    engine = sa.create_engine(DB_URL)
     if len(sys.argv) == 4:
         athlete_df = pd.read_csv(sys.argv[1])
         performance_df = pd.read_csv(sys.argv[2])
         match_df = pd.read_csv(sys.argv[3])
+        upload_data(athlete_df, performance_df, match_df, engine)
     elif len(sys.argv) == 3 and sys.argv[1] == "--s3":
         s3_folder = sys.argv[2]
-        DB_URL = os.getenv("DB_URL")
-        if DB_URL is None:
-            raise Exception("You must set the DB_URL environment variable")
-        engine = sa.create_engine(DB_URL)
         upload_from_s3(s3_folder, engine)
         engine.dispose()
     else:
