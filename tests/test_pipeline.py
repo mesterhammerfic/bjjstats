@@ -3,7 +3,7 @@ import os
 import pytest
 import pandas as pd
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from alembic.config import Config
 from alembic import command
 
@@ -29,12 +29,13 @@ def test_upload_data(setup_database):
     upload_data(athlete_df, performance_df, match_df, setup_database)
     engine = setup_database
     with engine.connect() as con:
-        rs = con.execute("SELECT * FROM athlete")
-        rows = rs.fetchall()
-        assert len(rows) == 3
-        rs = con.execute("SELECT * FROM performance")
-        rows = rs.fetchall()
-        assert len(rows) == 3
-        rs = con.execute("SELECT * FROM match")
-        rows = rs.fetchall()
-        assert len(rows) == 3
+        statement = text("SELECT COUNT(*) FROM athlete;")
+        result = con.execute(statement)
+        assert result.scalar() == 3
+        statement = text("SELECT COUNT(*) FROM performance;")
+        result = con.execute(statement)
+        assert result.scalar() == 6
+        statement = text("SELECT COUNT(*) FROM match;")
+        result = con.execute(statement)
+        assert result.scalar() == 3
+

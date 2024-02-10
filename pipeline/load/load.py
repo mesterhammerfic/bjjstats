@@ -9,10 +9,19 @@ import sqlalchemy as sa
 import os
 import sys
 
-def upload_data(athlete_df: pd.DataFrame, performance_df: pd.DataFrame, match_df: pd.DataFrame, engine: sa.engine.Engine):
+def upload_data(
+        athlete_df: pd.DataFrame,
+        performance_df: pd.DataFrame,
+        match_df: pd.DataFrame,
+        engine: sa.engine.Engine
+):
     with engine.connect() as con:
         print("deleting existing data")
-        statement = sa.text("TRUNCATE TABLE athlete, performance, match CASCADE;")
+        statement = sa.text("DELETE FROM athlete;")
+        con.execute(statement)
+        statement = sa.text("DELETE FROM performance;")
+        con.execute(statement)
+        statement = sa.text("DELETE FROM match;")
         con.execute(statement)
         con.commit()
 
