@@ -24,8 +24,7 @@ def setup_database():
     engine.dispose()
     os.remove("test.db")
 
-# this test uses the csv files in the fixtures folder of this test directory
-# to test the upload_data function
+
 def test_upload_data(setup_database):
     source_dir = os.path.dirname(__file__)
     athlete_df = pd.read_csv(os.path.join(source_dir, "fixtures", "athlete.csv"))
