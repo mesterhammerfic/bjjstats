@@ -10,10 +10,6 @@ from alembic import command
 
 from pipeline.load import upload_data
 
-# i'll use a sqlite database for testing so here's the fixture to set up the testing
-# database. I'll use the alembic migrations to set up the database schema
-# I'll also use the sqlalchemy library to interact with the database
-# I'll use the pytest fixture to set up the database and the tables
 @pytest.fixture
 def setup_database():
 
