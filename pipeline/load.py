@@ -27,7 +27,6 @@ def upload_data(athlete_df: pd.DataFrame, performance_df: pd.DataFrame, match_df
     print("upload complete")
 
 
-# the folling allows this to be run as a command line script
 if __name__ == "__main__":
     athlete_df = pd.read_csv(sys.argv[1])
     performance_df = pd.read_csv(sys.argv[2])
