@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from alembic.config import Config
 from alembic import command
 
-from pipeline.load import upload_data
+from pipeline.load.load import upload_data
 
 @pytest.fixture
 def setup_database():
