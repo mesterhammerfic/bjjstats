@@ -44,7 +44,3 @@ def test_upload_data(setup_database):
         rs = con.execute("SELECT * FROM match")
         rows = rs.fetchall()
         assert len(rows) == 3
-
-
-# here's how you would test this:
-# pytest tests/test_pipeline.py
