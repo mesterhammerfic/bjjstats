@@ -1,6 +1,5 @@
 import dataclasses
 import typing
-import os
 
 import requests
 import bs4
