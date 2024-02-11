@@ -8,6 +8,7 @@
 
 import os
 import typing
+import argparse
 
 import bs4
 import requests
@@ -133,22 +134,39 @@ def upload_to_s3(
     print("upload complete")
 
 
+# I'm gonna make this executable at the commandline but I want to use argparse
+# to make it more user friendly
+# I'm also going to add a flag to upload the data to s3
+# I'm going to add a flag to specify the number of athletes to scrape
+# I'm going to add a flag to specify the s3 folder to upload to
+# I'm going to add a flag to specify the output directory
+
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) == 2:
-        num_to_scrape = int(sys.argv[1])
-        athlete_df, matches_df, performances_df = scrape_matches_and_performances(num_to_scrape)
-        if len(sys.argv) == 3 and sys.argv[1] == "--s3":
-            s3_folder = sys.argv[2]
-            upload_to_s3(athlete_df, matches_df, performances_df, s3_folder)
-        else:
-            athlete_df.to_csv("athlete.csv")
-            matches_df.to_csv("match.csv")
-            performances_df.to_csv("performance.csv")
+    parser = argparse.ArgumentParser(description="scrape bjjheroes and extract the data")
+    parser.add_argument(
+        "num_to_scrape",
+        type=int,
+        help="the number of athletes to scrape",
+    )
+    parser.add_argument(
+        "--s3",
+        type=str,
+        help="the s3 folder to upload to",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="the output directory",
+    )
+    args = parser.parse_args()
+    athlete_df, matches_df, performances_df = scrape_matches_and_performances(args.num_to_scrape)
+    if args.s3:
+        upload_to_s3(athlete_df, matches_df, performances_df, args.s3)
+    if args.output:
+        athlete_df.to_csv(os.path.join(args.output, "athlete.csv"))
+        matches_df.to_csv(os.path.join(args.output, "match.csv"))
+        performances_df.to_csv(os.path.join(args.output, "performance.csv"))
     else:
-        print("usage: extract.py num_to_scrape")
-        print("or")
-        print("extract.py --s3 s3_folder_name num_to_scrape")
-        sys.exit(1)
-
-
+        print(athlete_df)
+        print(matches_df)
+        print(performances_df)
