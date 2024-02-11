@@ -97,8 +97,7 @@ def test_scrape_matches_and_performances_0() -> None:
 
 def test_scrape_matches_and_performances_1() -> None:
     """
-    this tests if the athlete_1.html file is scraped correctly
-    it is an example of an athlete with mtches
+    it is an example of an athlete with 3 matches
     the scraper should return a dataframe with 3 rows
     new athletes should be added to the df after it's scraped
     """
