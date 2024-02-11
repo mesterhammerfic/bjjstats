@@ -152,28 +152,26 @@ async def get_athlete_pages(
                 print(f"could not scrape {url}")
                 print("due to the following error")
                 print(e)
-            progress = len(pages)
-            if num_to_scrape is not None:
-                print(f"time elapsed: {datetime.now() - start_time}")
-                print(
-                    f"progress: {progress}/{num_to_scrape} ({progress/num_to_scrape:.2%})"
-                )
-            elif progress % 10 == 0:
-                print(f"time elapsed: {datetime.now() - start_time}")
-                print(
-                    f"progress: {progress}/{len(athletes_df)} ({progress/len(athletes_df):.2%})"
-                )
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        start_time = datetime.now()
-        for id_, athlete in athletes_df.iterrows():
-            id_: int  # type: ignore
-            tasks.append(get_page(session, athlete["url"], id_, start_time))
-            count = id_ + 1  # because the list is 0 indexed
-            if num_to_scrape is not None and count == num_to_scrape:
-                break
-        await asyncio.gather(*tasks)
+    start_time = datetime.now()
+    # i want to split it into groups of 100 so it doesnt timeout
+    if num_to_scrape is not None:
+        athletes_df = athletes_df.head(num_to_scrape)
+    for i in range(0, len(athletes_df), 100):
+        step_start_time = datetime.now()
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            start_time = datetime.now()
+            for id_, athlete in athletes_df.iloc[i : i + 100].iterrows():
+                id_: int  # type: ignore
+                tasks.append(get_page(session, athlete["url"], id_, start_time))
+                count = id_ + 1
+                if num_to_scrape is not None and count == num_to_scrape:
+                    break
+            await asyncio.gather(*tasks)
+        print(f"step {i} took {datetime.now() - step_start_time}")
+
+    print(f"total time: {datetime.now() - start_time}")
     return pages
 
 
