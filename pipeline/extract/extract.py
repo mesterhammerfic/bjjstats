@@ -10,12 +10,46 @@ import os
 import typing
 import argparse
 import datetime
+import dataclasses
 
 import bs4
 import requests  # type: ignore
 import pandas as pd
 from aws_lambda_powertools.utilities.data_classes import ALBEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
+
+
+@dataclasses.dataclass
+class Athlete:
+    name: str
+    nickname: str
+    url: str
+
+    def to_dict(self) -> dict[str, str]:
+        return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass
+class Match:
+    id: str
+    year: str
+    competition: str
+    method: str
+    stage: str
+    weight: str
+
+    def to_dict(self) -> dict[str, str]:
+        return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass
+class Performance:
+    match_id: str
+    athlete_id: str
+    result: str
+
+    def to_dict(self) -> dict[str, str]:
+        return dataclasses.asdict(self)
 
 
 def get_athletes_from_source() -> pd.DataFrame:
