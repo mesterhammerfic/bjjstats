@@ -9,6 +9,7 @@
 import os
 import typing
 import argparse
+import datetime
 
 import bs4
 import requests
@@ -134,12 +135,21 @@ def upload_to_s3(
     print("upload complete")
 
 
-# I'm gonna make this executable at the commandline but I want to use argparse
-# to make it more user friendly
-# I'm also going to add a flag to upload the data to s3
-# I'm going to add a flag to specify the number of athletes to scrape
-# I'm going to add a flag to specify the s3 folder to upload to
-# I'm going to add a flag to specify the output directory
+# heres the lambda handler
+def lambda_handler(event, context):
+    """
+    returns s3 folder that the data was uploaded to
+    """
+    s3_folder = datetime.datetime.now().strftime("%Y-%m-%d")
+    s3_directory = f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}"
+    athlete_df, matches_df, performances_df = scrape_matches_and_performances(event["num_to_scrape"])
+    upload_to_s3(athlete_df, matches_df, performances_df, s3_directory)
+    return {
+        "statusCode": 200,
+        "body": "upload complete",
+        "s3_folder": s3_folder,
+    }
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="scrape bjjheroes and extract the data")
