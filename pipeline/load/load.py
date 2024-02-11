@@ -5,19 +5,24 @@
 # DB_URL=[SECRET] python load.py athlete.csv performance.csv match.csv
 # or to load from s3 you would use the --s3 argument:
 # DB_URL=[SECRET] python load.py --s3 2021-01-01
+from typing import Dict, Any
 
 import pandas as pd
 import sqlalchemy as sa
 import os
 import sys
 
+from aws_lambda_powertools.utilities.data_classes import ALBEvent
+from aws_lambda_powertools.utilities.typing import LambdaContext
+
 CHUNKSIZE = 1000
 
+
 def upload_data(
-        athlete_df: pd.DataFrame,
-        performance_df: pd.DataFrame,
-        match_df: pd.DataFrame,
-        engine: sa.engine.Engine,
+    athlete_df: pd.DataFrame,
+    performance_df: pd.DataFrame,
+    match_df: pd.DataFrame,
+    engine: sa.engine.Engine,
 ) -> None:
     """
     This function takes in 3 dataframes and an engine and loads the data into the database
@@ -44,7 +49,9 @@ def upload_data(
         # here i'll truncate all the tables in one go and reset the index
         with engine.connect() as con:
             print("deleting existing data")
-            statement = sa.text("TRUNCATE athlete, performance, match RESTART IDENTITY;")
+            statement = sa.text(
+                "TRUNCATE athlete, performance, match RESTART IDENTITY;"
+            )
             con.execute(statement)
             con.commit()
 
@@ -78,10 +85,7 @@ def upload_data(
     print("upload complete")
 
 
-def upload_from_s3(
-        s3_folder: str,
-        engine: sa.engine.Engine
-) -> None:
+def upload_from_s3(s3_folder: str, engine: sa.engine.Engine) -> None:
     """
     This function takes in an s3 folder and an engine and loads the data from the s3 folder into the database
     :param s3_folder: either test or a date string in the format YYYY-MM-DD
@@ -96,15 +100,11 @@ def upload_from_s3(
     match_df = pd.read_parquet(
         f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/match.parquet"
     )
-    # and here i output them as csvs locally to debug
-    athlete_df.to_csv("athlete.csv")
-    performance_df.to_csv("performance.csv")
-    match_df.to_csv("match.csv")
 
     upload_data(athlete_df, performance_df, match_df, engine)
 
 
-def lambda_handler(event, context):
+def lambda_handler(event: ALBEvent, context: LambdaContext) -> Dict[str, Any]:
     if event.get("s3_folder"):
         s3_folder = event["s3_folder"]
         DB_URL = os.getenv("DB_URL")
@@ -114,9 +114,8 @@ def lambda_handler(event, context):
         upload_from_s3(s3_folder, engine)
         engine.dispose()
     else:
-        raise Exception(
-            "You must provide an s3_folder in the event"
-        )
+        raise Exception("You must provide an s3_folder in the event")
+    return {"statusCode": 200, "body": "Data loaded"}
 
 
 if __name__ == "__main__":
@@ -125,10 +124,7 @@ if __name__ == "__main__":
         raise Exception("You must set the DB_URL environment variable")
     engine = sa.create_engine(DB_URL)
     if len(sys.argv) == 4:
-        # i read without adding an index
         athlete_df = pd.read_csv(sys.argv[1], index_col=0)
-        athlete_df.to_csv("athlete.csv")
-
         performance_df = pd.read_csv(sys.argv[2], index_col=0)
         match_df = pd.read_csv(sys.argv[3], index_col=0)
         upload_data(athlete_df, performance_df, match_df, engine)

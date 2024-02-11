@@ -7,55 +7,29 @@
 # python extract.py --s3 's3_folder_name' 10 to export them to s3
 
 import os
-import typing
 import argparse
-import datetime
-import dataclasses
+from typing import Optional, Tuple, Any
+from datetime import datetime
 
 import bs4
 import requests  # type: ignore
 import pandas as pd
 from aws_lambda_powertools.utilities.data_classes import ALBEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
+import aiohttp
+import asyncio
+
+SOURCE_HOSTNAME = "https://www.bjjheroes.com"
 
 
-@dataclasses.dataclass
-class Athlete:
-    name: str
-    nickname: str
-    url: str
-
-    def to_dict(self) -> dict[str, str]:
-        return dataclasses.asdict(self)
-
-
-@dataclasses.dataclass
-class Match:
-    id: str
-    year: str
-    competition: str
-    method: str
-    stage: str
-    weight: str
-
-    def to_dict(self) -> dict[str, str]:
-        return dataclasses.asdict(self)
-
-
-@dataclasses.dataclass
-class Performance:
-    match_id: str
-    athlete_id: str
-    result: str
-
-    def to_dict(self) -> dict[str, str]:
-        return dataclasses.asdict(self)
-
-
-def get_athletes_from_source() -> pd.DataFrame:
+def get_athletes_from_source(html: str) -> pd.DataFrame:
+    """
+    This function scrapes the athletes from the bjjheroes website
+    :param html: html string of the bjjheroes a-z list of athletes
+    :return: a dataframe of the athletes with their name, nickname, and url
+    """
+    soup = bs4.BeautifulSoup(html, "html.parser")
     result = []
-    res = requests.get("https://www.bjjheroes.com/a-z-bjj-fighters-list")
-    soup = bs4.BeautifulSoup(res.text, "html.parser")
     table = soup.find_all("tr")
     for row in table:
         data = row.find_all("td")
@@ -65,7 +39,7 @@ def get_athletes_from_source() -> pd.DataFrame:
             a = dict(
                 name=name,
                 nickname=data[2].text,
-                url=f"https://www.bjjheroes.com{data[0].find('a').get('href')}",
+                url=f"{SOURCE_HOSTNAME}{data[0].find('a').get('href')}",
             )
             result.append(a)
     dataframe = pd.DataFrame(result)
@@ -74,15 +48,15 @@ def get_athletes_from_source() -> pd.DataFrame:
 
 
 def scrape_matches_and_performances(
-    num_to_scrape: typing.Optional[int] = None,
-) -> typing.Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    athlete_df: pd.DataFrame,
+    id_to_html: dict[int, str],
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    This function scrapes the matches and performances from each athletes page
-    :param num_to_scrape: the number of athletes to scrape, this is used for testing
-    :return: a tuple of 3 dataframes, the first is the athletes dataframe, the second is the matches dataframe
-    and the third is the performances dataframe
+    this function parses the athlete pages and extracts the matches and performances
+    :param athlete_df: the athletes dataframe, this is modified in place
+    :param id_to_html: a mapping of athlete_id to a soup object of the athletes page
+    :return: a tuple of the matches, and performances dataframes
     """
-    athlete_df = get_athletes_from_source()
     matches_df = pd.DataFrame(
         columns=[
             "id",
@@ -96,10 +70,8 @@ def scrape_matches_and_performances(
     matches_df.set_index("id", inplace=True)
     performances_df = pd.DataFrame(columns=["match_id", "athlete_id", "result"])
 
-    def scrape_matches(athlete_id: int, athlete_url: str) -> None:
-        print(f"scraping match data for {athlete_url}")
-        res = requests.get(athlete_url)
-        bs = bs4.BeautifulSoup(res.content, features="html.parser")
+    def scrape_athlete_page(athlete_id: int, html: str) -> None:
+        bs = bs4.BeautifulSoup(html, "html.parser")
         table = bs.find("table", {"class": "table table-striped sort_table"})
         if table is None:
             return
@@ -122,16 +94,20 @@ def scrape_matches_and_performances(
             # check if there is a link to the opponents page
             if opponent_name_cell.find("a"):
                 opponent_name = opponent_name_cell.find("a").text
-                opponent_url = f"https://www.bjjheroes.com{opponent_name_cell.find('a').get('href')}"
+                opponent_url = (
+                    f"{SOURCE_HOSTNAME}{opponent_name_cell.find('a').get('href')}"
+                )
                 opponent_id = athlete_df[athlete_df["url"] == opponent_url].index
             else:
                 opponent_name = opponent_name_cell.find("span").text
                 opponent_url = ""
                 opponent_id = athlete_df[athlete_df["name"] == opponent_name].index
             if opponent_id.empty:
-                print(f"new athlete found: {opponent_name}")
                 if opponent_name == "N/A":
-                    continue
+                    # pandas parses N/A as NaN so we need to replace
+                    # it with a string for when we upload to the database
+                    opponent_name = "Unknown"
+                print(f"new athlete found: {opponent_name}")
                 athlete_df.loc[len(athlete_df)] = [opponent_name, "", opponent_url]
 
             # check if the match is in the matches_df, the match_id is from another
@@ -144,12 +120,80 @@ def scrape_matches_and_performances(
 
     # for each row in the athletes data frame, scrape the matches and performances
     # making sure that the athlete_id is the index of the dataframe
-    for i, row in athlete_df.iterrows():
-        scrape_matches(i, row["url"])
-        if num_to_scrape is not None and i == num_to_scrape:
-            break
+    for i, html in id_to_html.items():
+        scrape_athlete_page(i, html)
     performances_df.index.name = "id"
+    return matches_df, performances_df
 
+
+async def get_athlete_pages(
+    athletes_df: pd.DataFrame,
+    num_to_scrape: Optional[int] = None,
+) -> dict[int, str]:
+    """
+    This function takes in the number of athletes to scrape and returns a mapping of athlete_id to a soup object of the athletes page
+    :param athletes_df: the athletes dataframe with the urls
+    :param num_to_scrape: the number of athletes to scrape before stopping, this is used for testing
+    :return: a mapping of athlete_id to a soup object of the athletes page
+    """
+    pages: dict[int, str] = {}
+
+    async def get_page(
+        session: aiohttp.ClientSession,
+        url: str,
+        athlete_id: int,
+        start_time: datetime,
+    ) -> None:
+        async with session.get(url) as response:
+            try:
+                page = await response.text()
+                pages[athlete_id] = page
+            except Exception as e:
+                print(f"could not scrape {url}")
+                print("due to the following error")
+                print(e)
+            progress = len(pages)
+            if num_to_scrape is not None:
+                print(f"time elapsed: {datetime.now() - start_time}")
+                print(
+                    f"progress: {progress}/{num_to_scrape} ({progress/num_to_scrape:.2%})"
+                )
+            elif progress % 10 == 0:
+                print(f"time elapsed: {datetime.now() - start_time}")
+                print(
+                    f"progress: {progress}/{len(athletes_df)} ({progress/len(athletes_df):.2%})"
+                )
+
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        start_time = datetime.now()
+        for id_, athlete in athletes_df.iterrows():
+            id_: int  # type: ignore
+            tasks.append(get_page(session, athlete["url"], id_, start_time))
+            count = id_ + 1  # because the list is 0 indexed
+            if num_to_scrape is not None and count == num_to_scrape:
+                break
+        await asyncio.gather(*tasks)
+    return pages
+
+
+# here is the main scraping function that takes in the number of athletes to scrape
+# and returns the dataframes
+def scrape(
+    num_to_scrape: Optional[int] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    This function takes in the number of athletes to scrape and returns the dataframes
+    for the athletes, matches, and performances
+    :param num_to_scrape: the number of athletes to scrape before stopping, this is used for testing
+    :return: a tuple of the athletes, matches, and performances dataframes
+    """
+    res = requests.get(f"{SOURCE_HOSTNAME}/a-z-bjj-fighters-list")
+    athlete_df = get_athletes_from_source(res.text)
+    athlete_pages = asyncio.run(get_athlete_pages(athlete_df, num_to_scrape))
+    matches_df, performances_df = scrape_matches_and_performances(
+        athlete_df, athlete_pages
+    )
     return athlete_df, matches_df, performances_df
 
 
@@ -167,6 +211,7 @@ def upload_to_s3(
     :param performances_df: the performances dataframe
     :param s3_folder: the s3 folder to upload to
     """
+    print("uploading to s3")
     athlete_df.to_parquet(
         f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/athlete.parquet"
     )
@@ -179,16 +224,13 @@ def upload_to_s3(
     print("upload complete")
 
 
-# heres the lambda handler
-def lambda_handler(event: ALBEvent, context: LambdaContext) -> dict[str, typing.Any]:
+def lambda_handler(event: ALBEvent, context: LambdaContext) -> dict[str, Any]:
     """
-    returns s3 folder that the data was uploaded to
+    returns s3 folder name that the data was uploaded to
     """
-    s3_folder = datetime.datetime.now().strftime("%Y-%m-%d")
+    s3_folder = datetime.now().strftime("%Y-%m-%d")
     s3_directory = f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}"
-    athlete_df, matches_df, performances_df = scrape_matches_and_performances(
-        event["num_to_scrape"]
-    )
+    athlete_df, matches_df, performances_df = scrape()
     upload_to_s3(athlete_df, matches_df, performances_df, s3_directory)
     return {
         "statusCode": 200,
@@ -202,11 +244,6 @@ if __name__ == "__main__":
         description="scrape bjjheroes and extract the data"
     )
     parser.add_argument(
-        "num_to_scrape",
-        type=int,
-        help="the number of athletes to scrape",
-    )
-    parser.add_argument(
         "--s3",
         type=str,
         help="the s3 folder to upload to",
@@ -216,10 +253,15 @@ if __name__ == "__main__":
         type=str,
         help="the output directory",
     )
-    args = parser.parse_args()
-    athlete_df, matches_df, performances_df = scrape_matches_and_performances(
-        args.num_to_scrape
+    parser.add_argument(
+        "num_to_scrape",
+        type=int,
+        nargs="?",
+        default=None,
+        help="the number of athletes to scrape",
     )
+    args = parser.parse_args()
+    athlete_df, matches_df, performances_df = scrape(args.num_to_scrape)
     if args.s3:
         upload_to_s3(athlete_df, matches_df, performances_df, args.s3)
     if args.output:
