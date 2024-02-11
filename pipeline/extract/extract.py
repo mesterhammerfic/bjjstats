@@ -12,17 +12,19 @@ import argparse
 import datetime
 
 import bs4
-import requests
+import requests  # type: ignore
 import pandas as pd
+from aws_lambda_powertools.utilities.data_classes import ALBEvent
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 
 def get_athletes_from_source() -> pd.DataFrame:
     result = []
     res = requests.get("https://www.bjjheroes.com/a-z-bjj-fighters-list")
-    soup = bs4.BeautifulSoup(res.text, 'html.parser')
-    table = soup.find_all('tr')
+    soup = bs4.BeautifulSoup(res.text, "html.parser")
+    table = soup.find_all("tr")
     for row in table:
-        data = row.find_all('td')
+        data = row.find_all("td")
         if data:
             name = f"{data[0].text} {data[1].text}"
             name = name.replace("  ", " ")
@@ -38,11 +40,11 @@ def get_athletes_from_source() -> pd.DataFrame:
 
 
 def scrape_matches_and_performances(
-        num_to_scrape: typing.Optional = 10
+    num_to_scrape: typing.Optional[int] = None,
 ) -> typing.Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     This function scrapes the matches and performances from each athletes page
-    :param num_to_scrape: the number of athletes to scrape
+    :param num_to_scrape: the number of athletes to scrape, this is used for testing
     :return: a tuple of 3 dataframes, the first is the athletes dataframe, the second is the matches dataframe
     and the third is the performances dataframe
     """
@@ -60,7 +62,7 @@ def scrape_matches_and_performances(
     matches_df.set_index("id", inplace=True)
     performances_df = pd.DataFrame(columns=["match_id", "athlete_id", "result"])
 
-    def scrape_matches(athlete_id: int, athlete_url: str):
+    def scrape_matches(athlete_id: int, athlete_url: str) -> None:
         print(f"scraping match data for {athlete_url}")
         res = requests.get(athlete_url)
         bs = bs4.BeautifulSoup(res.content, features="html.parser")
@@ -68,7 +70,7 @@ def scrape_matches_and_performances(
         if table is None:
             return
         body = table.find("tbody")
-        rows = body.find_all('tr')
+        rows = body.find_all("tr")
 
         for row in rows:
             match_details = row.find_all("td")
@@ -105,22 +107,24 @@ def scrape_matches_and_performances(
                 matches_df.loc[match_id] = [year, competition, method, stage, weight]
             # add the performance to the performances_df
             performances_df.loc[len(performances_df)] = [match_id, athlete_id, result]
+
     # for each row in the athletes data frame, scrape the matches and performances
     # making sure that the athlete_id is the index of the dataframe
     for i, row in athlete_df.iterrows():
         scrape_matches(i, row["url"])
-        if i == num_to_scrape:
+        if num_to_scrape is not None and i == num_to_scrape:
             break
     performances_df.index.name = "id"
 
     return athlete_df, matches_df, performances_df
 
+
 # the following function uses the output of the above function and sends it to s3
 def upload_to_s3(
-        athlete_df: pd.DataFrame,
-        matches_df: pd.DataFrame,
-        performances_df: pd.DataFrame,
-        s3_folder: str
+    athlete_df: pd.DataFrame,
+    matches_df: pd.DataFrame,
+    performances_df: pd.DataFrame,
+    s3_folder: str,
 ) -> None:
     """
     This function takes in the dataframes and uploads them to s3
@@ -129,20 +133,28 @@ def upload_to_s3(
     :param performances_df: the performances dataframe
     :param s3_folder: the s3 folder to upload to
     """
-    athlete_df.to_parquet(f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/athlete.parquet")
-    matches_df.to_parquet(f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/match.parquet")
-    performances_df.to_parquet(f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/performance.parquet")
+    athlete_df.to_parquet(
+        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/athlete.parquet"
+    )
+    matches_df.to_parquet(
+        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/match.parquet"
+    )
+    performances_df.to_parquet(
+        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/performance.parquet"
+    )
     print("upload complete")
 
 
 # heres the lambda handler
-def lambda_handler(event, context):
+def lambda_handler(event: ALBEvent, context: LambdaContext) -> dict[str, typing.Any]:
     """
     returns s3 folder that the data was uploaded to
     """
     s3_folder = datetime.datetime.now().strftime("%Y-%m-%d")
     s3_directory = f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}"
-    athlete_df, matches_df, performances_df = scrape_matches_and_performances(event["num_to_scrape"])
+    athlete_df, matches_df, performances_df = scrape_matches_and_performances(
+        event["num_to_scrape"]
+    )
     upload_to_s3(athlete_df, matches_df, performances_df, s3_directory)
     return {
         "statusCode": 200,
@@ -152,7 +164,9 @@ def lambda_handler(event, context):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="scrape bjjheroes and extract the data")
+    parser = argparse.ArgumentParser(
+        description="scrape bjjheroes and extract the data"
+    )
     parser.add_argument(
         "num_to_scrape",
         type=int,
@@ -169,7 +183,9 @@ if __name__ == "__main__":
         help="the output directory",
     )
     args = parser.parse_args()
-    athlete_df, matches_df, performances_df = scrape_matches_and_performances(args.num_to_scrape)
+    athlete_df, matches_df, performances_df = scrape_matches_and_performances(
+        args.num_to_scrape
+    )
     if args.s3:
         upload_to_s3(athlete_df, matches_df, performances_df, args.s3)
     if args.output:
