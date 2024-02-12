@@ -8,8 +8,8 @@ COPY psql_requirements.txt ${LAMBDA_TASK_ROOT}
 COPY wins_vs_finishes.html ${LAMBDA_TASK_ROOT}
 
 # Install the specified packages
-RUN pip install -r requirements.txt
 RUN pip install -r psql_requirements.txt -t .
+RUN pip install -r requirements.txt
 
 # Copy function code
 COPY lambda_function.py ${LAMBDA_TASK_ROOT}

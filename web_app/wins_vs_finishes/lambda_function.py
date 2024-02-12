@@ -1,21 +1,26 @@
 import os
+from typing import Tuple, List, Any
 
 import plotly.express as px
 from jinja2 import Environment, FileSystemLoader
 import psycopg2
+from aws_lambda_powertools.utilities.data_classes import ALBEvent
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 DB_URL = os.getenv("DB_URL")
 if DB_URL is None:
-    raise Exception("You must set the DB_URL environment variable in the lambda function settings")
+    raise Exception(
+        "You must set the DB_URL environment variable in the lambda function settings"
+    )
 
 connection = psycopg2.connect(
     DB_URL,
 )
 path = os.path.dirname(__file__)
-env = Environment(loader=FileSystemLoader(path, encoding='utf8'))
+env = Environment(loader=FileSystemLoader(path, encoding="utf8"))
 
 
-def get_records():
+def get_records() -> Tuple[List[str], List[float], List[float]]:
     print("getting urls from db")
     with connection.cursor() as cursor:
         cursor.execute(
@@ -48,7 +53,8 @@ def get_records():
     finish_percent = [row[3] for row in rows]
     return names, win_percent, finish_percent
 
-def handler(event, context):
+
+def handler(event: ALBEvent, context: LambdaContext) -> dict[str, Any]:
     names, win_percent, finish_percent = get_records()
 
     fig = px.scatter(x=win_percent, y=finish_percent, text=names)
@@ -56,14 +62,13 @@ def handler(event, context):
     plotly_jinja_data = {"fig": fig.to_html(full_html=False)}
     # consider also defining the include_plotlyjs parameter to point to an external Plotly.js as described above
 
-    template = env.get_template('wins_vs_finishes.html', )
+    template = env.get_template(
+        "wins_vs_finishes.html",
+    )
     res = {
         "statusCode": 200,
-        "headers": {
-            "Content-Type": "*/*"
-        },
-        "body": template.render(plotly_jinja_data)
+        "headers": {"Content-Type": "*/*"},
+        "body": template.render(plotly_jinja_data),
     }
 
     return res
-
