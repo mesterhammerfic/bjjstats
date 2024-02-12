@@ -74,6 +74,7 @@ def scrape_matches_and_performances(
         bs = bs4.BeautifulSoup(html, "html.parser")
         table = bs.find("table", {"class": "table table-striped sort_table"})
         if table is None:
+            # this is an athlete that has no recorded matches
             return
         body = table.find("tbody")
         rows = body.find_all("tr")
@@ -92,8 +93,9 @@ def scrape_matches_and_performances(
             # check if the opponent name is in the athlete_df:
             opponent_name_cell = match_details[1]
             # check if there is a link to the opponents page
-            if opponent_name_cell.find("a"):
-                opponent_name = opponent_name_cell.find("a").text
+            link = opponent_name_cell.find("a")
+            if link is not None:
+                opponent_name = link.text
                 opponent_url = (
                     f"{SOURCE_HOSTNAME}{opponent_name_cell.find('a').get('href')}"
                 )
@@ -134,7 +136,7 @@ async def get_athlete_pages(
     This function takes in the number of athletes to scrape and returns a mapping of athlete_id to a soup object of the athletes page
     :param athletes_df: the athletes dataframe with the urls
     :param num_to_scrape: the number of athletes to scrape before stopping, this is used for testing
-    :return: a mapping of athlete_id to a soup object of the athletes page
+    :return: a mapping of athlete_id to a string representation of the html for the athlete's page
     """
     pages: dict[int, str] = {}
 
@@ -142,7 +144,6 @@ async def get_athlete_pages(
         session: aiohttp.ClientSession,
         url: str,
         athlete_id: int,
-        start_time: datetime,
     ) -> None:
         async with session.get(url) as response:
             try:
@@ -154,7 +155,7 @@ async def get_athlete_pages(
                 print(e)
 
     start_time = datetime.now()
-    # i want to split it into groups of 100 so it doesnt timeout
+    # We split the scraping into chunks of 100 to avoid a timeout error from asyncio
     if num_to_scrape is not None:
         athletes_df = athletes_df.head(num_to_scrape)
     for i in range(0, len(athletes_df), 100):
@@ -164,7 +165,7 @@ async def get_athlete_pages(
             start_time = datetime.now()
             for id_, athlete in athletes_df.iloc[i : i + 100].iterrows():
                 id_: int  # type: ignore
-                tasks.append(get_page(session, athlete["url"], id_, start_time))
+                tasks.append(get_page(session, athlete["url"], id_))
                 count = id_ + 1
                 if num_to_scrape is not None and count == num_to_scrape:
                     break
@@ -226,10 +227,12 @@ def lambda_handler(event: ALBEvent, context: LambdaContext) -> dict[str, Any]:
     """
     returns s3 folder name that the data was uploaded to
     """
-    s3_folder = datetime.now().strftime("%Y-%m-%d")
-    s3_directory = f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}"
-    athlete_df, matches_df, performances_df = scrape()
-    upload_to_s3(athlete_df, matches_df, performances_df, s3_directory)
+    num_to_scrape = event.get("num_to_scrape")
+    s3_folder = event.get("s3_folder")
+    if s3_folder is None:
+        s3_folder = datetime.now().strftime("%Y-%m-%d")
+    athlete_df, matches_df, performances_df = scrape(num_to_scrape)
+    upload_to_s3(athlete_df, matches_df, performances_df, s3_folder)
     return {
         "statusCode": 200,
         "body": "upload complete",
