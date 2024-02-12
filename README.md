@@ -38,9 +38,10 @@ do `pip install -r requirements.txt` for setup
 black, flake8, and mypy)
 
 #### Try the pipeline locally
+> **_NOTE:_**  The `extract.py` script takes an optional argument of an integer to limit the number of pages to scrape. This is useful for testing the pipeline with a smaller dataset to save time.
+
 with local csv files:
  - run `python pipeline/extract/extract.py 10 --output pipeline/load` to extract and transform the data to the `pipeline/load` directory.
-The `10` is the number of pages to scrape. You can change this to any number, or leave it out to scrape all pages.
  - run `DB_URL=sqlite:///test.db python pipeline/load/load.py pipeline/load/athlete.csv pipeline/load/performance.csv pipeline/load/match.csv` to load the data into a local sqlite database
 
 with parquet files uploaded to s3:
