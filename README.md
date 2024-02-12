@@ -38,10 +38,10 @@ do `pip install -r requirements.txt` for setup
 black, flake8, and mypy)
 
 #### Try the pipeline locally
-> **_NOTE:_**  The `extract.py` script takes an optional argument of an integer to limit the number of pages to scrape. This is useful for testing the pipeline with a smaller dataset to save time.
+> **_NOTE:_**  The `extract.py` script takes an optional argument of an integer to limit the number of pages to scrape. This is useful for testing the pipeline with a smaller dataset to save time. e.g. `python pipeline/extract/extract.py 10`
 
 with local csv files:
- - run `python pipeline/extract/extract.py 10 --output pipeline/load` to extract and transform the data to the `pipeline/load` directory.
+ - run `python pipeline/extract/extract.py --output pipeline/load` to extract and transform the data to the `pipeline/load` directory.
  - run `DB_URL=sqlite:///test.db python pipeline/load/load.py pipeline/load/athlete.csv pipeline/load/performance.csv pipeline/load/match.csv` to load the data into a local sqlite database
 
 with parquet files uploaded to s3:
@@ -49,7 +49,7 @@ with parquet files uploaded to s3:
 Make sure you have [aws credentials set up](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html).
 In s3, create a bucket called `bjjstats` with a directory named `bjjheroes-scrape-v1`
 
-- run `python pipeline/extract/extract.py 10 --s3 'folder name'`
+- run `python pipeline/extract/extract.py --s3 'folder name'`
 - run `DB_URL=sqlite:///test.db python pipeline/load/load.py --s3 'folder name'`
 
 ----------------------------
