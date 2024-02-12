@@ -1,5 +1,5 @@
 # bjjstats
-WIP web app to allow users to visualize and explore bjj competitors records quickly and easily.
+A dashboard app to visualize the records of the top cBrazilian Jiu Jitsu athletes.
 
 ## Architecture
 Batch ETL design:
@@ -20,18 +20,18 @@ Todo list:
 
 - [x] write first web app endpoint with test data
 - [x] write load function script
-- [x] write extract and transform function script
+- [x] write async extract and transform function script
 - [ ] create docker containers for extract and load functions
 - [ ] set up lambda functions to run the docker containers
 - [ ] set up step function to automate the ETL pipeline with eventbridge
 event to schedule regular data updates
 
-
+--------------------------------
 
 ## Quickstart Pre-Reqs
 
  - clone the repository locally
- - in the `videobookmarks` directory,
+ - in the `bjjstats` directory,
 do `pip install -r requirements.txt` for setup
  - run the tests with `DB_URL=sqlite:///test.db pytest tests -v`
  - set up pre-commit hooks with `pre-commit install` (this repo uses
@@ -39,7 +39,8 @@ black, flake8, and mypy)
 
 #### Try the pipeline locally
 with local csv files:
- - run `python pipeline/extract/extract.py 10 --output pipeline/load` to extract and transform the data to the `pipeline/load` directory. Note: the `10` is the number of pages to scrape, you can change this to any number.
+ - run `python pipeline/extract/extract.py 10 --output pipeline/load` to extract and transform the data to the `pipeline/load` directory.
+The `10` is the number of pages to scrape. You can change this to any number, or leave it out to scrape all pages.
  - run `DB_URL=sqlite:///test.db python pipeline/load/load.py pipeline/load/athlete.csv pipeline/load/performance.csv pipeline/load/match.csv` to load the data into a local sqlite database
 
 with parquet files uploaded to s3:
@@ -50,6 +51,7 @@ In s3, create a bucket called `bjjstats` with a directory named `bjjheroes-scrap
 - run `python pipeline/extract/extract.py 10 --s3 'folder name'`
 - run `DB_URL=sqlite:///test.db python pipeline/load/load.py --s3 'folder name'`
 
+----------------------------
 ### Schema
 This schema represents a many-to-many relationship between athletes
 and matches via the performance table.
@@ -79,12 +81,3 @@ one performance from each athlete participating in the match
 | method      | how the match was won (eg. armbar, points (2-0), DQ)                 |
 | stage       | the stage of the tournament eg quarterfinals, semifinals, finals     |
 | weight      | the official weight class of the match                               |
-
-
-
-
-### Making the lambda for athlete_scrape
-The `athlete_scrape` folder under the `lambda` directory contains code for a scraper
-that is set up in AWS lambda to scrape new athletes and add them to the database.
-I followed this guide to zip the athlete scrape function and upload it to Lambda:
-https://medium.com/@jenniferjasperse/how-to-use-postgres-with-aws-lambda-and-python-44e9d9154513
