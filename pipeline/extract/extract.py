@@ -2,7 +2,7 @@
 # it scrapes the bjjheroes website and extracts the data into a set of parquet files
 # and then uploads them to s3
 # heres how you would execute the script
-# python extract.py 10 to export them to local csv files
+# python extract.py 10 --output ./ to extract the data and save it to the current directory
 # or
 # python extract.py --s3 's3_folder_name' 10 to export them to s3
 

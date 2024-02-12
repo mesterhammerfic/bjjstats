@@ -5,9 +5,9 @@ WIP web app to allow users to visualize and explore bjj competitors records quic
 Batch ETL design:
 ![Alt text](img/bjjstats-system-design.png)
 #### Key behavior of this design
-Once a month, the entire warehouse is deleted and recreated using the 
-latest data pulled from the website. When the data is pulled each month, 
-it is stored in s3 before it is loaded into the warehouse. The lambda 
+Once a month, the entire warehouse is deleted and recreated using the
+latest data pulled from the website. When the data is pulled each month,
+it is stored in s3 before it is loaded into the warehouse. The lambda
 functions are stored as Docker containers in ECS.
 
 ##### Why this design?
@@ -17,22 +17,41 @@ data, but this would require complex logic to determine which matches
 are already in the database.
 
 Todo list:
-- ~~write first web app endpoint with test data~~
-- write extract & load lambda function and set up docker container
-- write transformation lambda and set up docker container
-- set up step function to automate the ELT pipeline
-- set up eventbridge event to schedule regular data updates
+
+- [x] write first web app endpoint with test data
+- [x] write load function script
+- [x] write extract and transform function script
+- [ ] create docker containers for extract and load functions
+- [ ] set up lambda functions to run the docker containers
+- [ ] set up step function to automate the ETL pipeline with eventbridge
+event to schedule regular data updates
 
 
 
 ## Quickstart Pre-Reqs
 
  - clone the repository locally
- - in the `videobookmarks` directory, 
-do`python3 -m pip install .` for setup
+ - in the `videobookmarks` directory,
+do `pip install -r requirements.txt` for setup
+ - run the tests with `DB_URL=sqlite:///test.db pytest tests -v`
+ - set up pre-commit hooks with `pre-commit install` (this repo uses
+black, flake8, and mypy)
+
+#### Try the pipeline locally
+with local csv files:
+ - run `python pipeline/extract/extract.py 10 --output pipeline/load` to extract and transform the data to the `pipeline/load` directory. Note: the `10` is the number of pages to scrape, you can change this to any number.
+ - run `DB_URL=sqlite:///test.db python pipeline/load/load.py pipeline/load/athlete.csv pipeline/load/performance.csv pipeline/load/match.csv` to load the data into a local sqlite database
+
+with parquet files uploaded to s3:
+
+Make sure you have [aws credentials set up](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html).
+In s3, create a bucket called `bjjstats` with a directory named `bjjheroes-scrape-v1`
+
+- run `python pipeline/extract/extract.py 10 --s3 'folder name'`
+- run `DB_URL=sqlite:///test.db python pipeline/load/load.py --s3 'folder name'`
 
 ### Schema
-This schema represents a many-to-many relationship between athletes 
+This schema represents a many-to-many relationship between athletes
 and matches via the performance table.
 ![Alt text](img/schema.png)
 `athlete` One entry per athlete
@@ -50,7 +69,7 @@ and matches via the performance table.
 | result | Win/Loss/Draw               |
 
 
-`match` One entry per match, each match is linked to two performances, 
+`match` One entry per match, each match is linked to two performances,
 one performance from each athlete participating in the match
 
 | field       | meaning                                                              |
@@ -65,7 +84,7 @@ one performance from each athlete participating in the match
 
 
 ### Making the lambda for athlete_scrape
-The `athlete_scrape` folder under the `lambda` directory contains code for a scraper 
+The `athlete_scrape` folder under the `lambda` directory contains code for a scraper
 that is set up in AWS lambda to scrape new athletes and add them to the database.
 I followed this guide to zip the athlete scrape function and upload it to Lambda:
 https://medium.com/@jenniferjasperse/how-to-use-postgres-with-aws-lambda-and-python-44e9d9154513
