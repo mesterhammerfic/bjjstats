@@ -109,7 +109,6 @@ def scrape_matches_and_performances(
                     # pandas parses N/A as NaN so we need to replace
                     # it with a string for when we upload to the database
                     opponent_name = "Unknown"
-                print(f"new athlete found: {opponent_name}")
                 athlete_df.loc[len(athlete_df)] = [opponent_name, "", opponent_url]
 
             # check if the match is in the matches_df, the match_id is from another
