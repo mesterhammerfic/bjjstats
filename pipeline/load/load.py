@@ -2,18 +2,19 @@
 # and loads them into the database. The dataframes are the athlete,
 # performance, and match tables.
 # here's how you would invoke it from the command line
-# DB_URL=[SECRET] python load.py athlete.csv performance.csv match.csv
+# DB_URL=[SECRET] python load.py directory_with_csv_files
 # or to load from s3 you would use the --s3 argument:
-# DB_URL=[SECRET] python load.py --s3 2021-01-01
+# DB_URL=[SECRET] python load.py name_of_s3_folder --s3
 from typing import Dict, Any
 
 import pandas as pd
 import sqlalchemy as sa
 import os
-import sys
+import argparse
 
 from aws_lambda_powertools.utilities.data_classes import ALBEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
+import awswrangler as wr
 
 CHUNKSIZE = 1000
 
@@ -85,20 +86,24 @@ def upload_data(
     print("upload complete")
 
 
-def upload_from_s3(s3_folder: str, engine: sa.engine.Engine) -> None:
+def upload_from_s3(
+    s3_folder: str, engine: sa.engine.Engine, region: str = "us-east-2"
+) -> None:
     """
     This function takes in an s3 folder and an engine and loads the data from the s3 folder into the database
     :param s3_folder: either test or a date string in the format YYYY-MM-DD
     :param engine: the sqlalchemy engine to use
     """
-    athlete_df = pd.read_parquet(
-        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/athlete.parquet"
+    athlete_df = wr.pandas.read_parquet(
+        path=f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/athlete.parquet?region={region}"
     )
-    performance_df = pd.read_parquet(
-        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/performance.parquet"
+
+    performance_df = wr.pandas.read_parquet(
+        path=f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/performance.parquet?region={region}"
     )
-    match_df = pd.read_parquet(
-        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/match.parquet"
+
+    match_df = wr.pandas.read_parquet(
+        path=f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/match.parquet?region={region}"
     )
 
     upload_data(athlete_df, performance_df, match_df, engine)
@@ -119,20 +124,22 @@ def lambda_handler(event: ALBEvent, context: LambdaContext) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Load data into the database")
+    parser.add_argument("input", type=str, help="the directory where the csv files are")
+    parser.add_argument("--s3", action="store_true", help="whether to load from s3")
+    args = parser.parse_args()
     DB_URL = os.getenv("DB_URL")
     if DB_URL is None:
         raise Exception("You must set the DB_URL environment variable")
     engine = sa.create_engine(DB_URL)
-    if len(sys.argv) == 4:
-        athlete_df = pd.read_csv(sys.argv[1], index_col=0)
-        performance_df = pd.read_csv(sys.argv[2], index_col=0)
-        match_df = pd.read_csv(sys.argv[3], index_col=0)
-        upload_data(athlete_df, performance_df, match_df, engine)
-    elif len(sys.argv) == 3 and sys.argv[1] == "--s3":
-        s3_folder = sys.argv[2]
-        upload_from_s3(s3_folder, engine)
-        engine.dispose()
+    if args.s3:
+        upload_from_s3(args.input, engine)
     else:
-        raise Exception(
-            "You must provide 3 csv files or use the --s3 argument to specify an s3 folder to load from"
+        athlete_df = pd.read_csv(os.path.join(args.input, "athlete.csv"), index_col=0)
+        performance_df = pd.read_csv(
+            os.path.join(args.input, "performance.csv"), index_col=0
         )
+        match_df = pd.read_csv(os.path.join(args.input, "match.csv"), index_col=0)
+        upload_data(athlete_df, performance_df, match_df, engine)
+    engine.dispose()
+    print("data loaded")
