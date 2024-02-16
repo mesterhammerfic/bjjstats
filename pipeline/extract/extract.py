@@ -174,6 +174,9 @@ class Scraper:
 
     def srape_htmls(self) -> None:
         while self.id_to_html:
+            remaining = len(self.id_to_html)
+            if remaining % 100 == 0:
+                print(f"{remaining} athletes left to scrape")
             i, html = self.id_to_html.popitem()
             self.scrape_athlete_page(i, html)
 
