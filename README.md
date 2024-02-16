@@ -1,5 +1,5 @@
 # bjjstats
-A dashboard app to visualize the records of the top cBrazilian Jiu Jitsu athletes.
+A dashboard app to visualize the records of the top Brazilian Jiu Jitsu athletes.
 
 ## Architecture
 Batch ETL design:
@@ -82,3 +82,20 @@ one performance from each athlete participating in the match
 | method      | how the match was won (eg. armbar, points (2-0), DQ)                 |
 | stage       | the stage of the tournament eg quarterfinals, semifinals, finals     |
 | weight      | the official weight class of the match                               |
+
+
+### Scraper (Extract and Transform Lambda)
+<img src="img/scraper.png" alt="image" width="400" height="auto">
+In the diagram above, the blue circles represent the data that the scraper returns, and the green
+squares represent processes that will be run in a loop until all the athletes in the dataframe have
+been marked as done.
+
+This scraper is complicated due to the fact that not all athlete page links are located on the main
+a-z list of athletes, some are found on the pages of other athletes. This means that as we scrape the
+athlete pages, we will find new athlete pages to scrape. We use a column in the athlete dataframe to
+track which pages have been scraped and which have not.
+
+Also in order to improve the speed of the scraping, we use asyncio to download the htmls of the athlete
+pages asynchronously. However, we do not convert the html pages to BeautifulSoup objects in async because
+this requires a lot of memory. In order to strike a medium between speed and memory usage, we download the
+htmls in parallel and then convert them to BeautifulSoup objects in series.

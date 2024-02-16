@@ -221,17 +221,7 @@ class Scraper:
     def scrape(
         self,
     ) -> None:
-        """
-        This scraper is complex due to the fact that not all athlete page links are located on the main
-        a-z list of athletes, some are found on the page of another athlete. This means that as we scrape the
-        athlete pages, we will find new athlete pages to scrape. This is why we use the needs_scrape column in the
-        athlete dataframe to keep track of which athletes still need to be scraped.
-
-        Also in order to improve the speed of the scraping, we use asyncio to download the htmls of the athlete
-        pages in parallel. However, we do not convert the html pages to BeautifulSoup objects in parallel because
-        this requires a lot of memory. In order to strike a medium between speed and memory usage, we download the
-        htmls in parallel and then convert them to BeautifulSoup objects in series.
-        """
+        """ """
         start_time = datetime.now()
         res = requests.get(f"{SOURCE_HOSTNAME}/a-z-bjj-fighters-list")
         self.get_athletes_from_source(res.text)
