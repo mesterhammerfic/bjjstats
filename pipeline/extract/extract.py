@@ -173,10 +173,12 @@ class Scraper:
         self.athlete_df.loc[athlete_id, "needs_scrape"] = False
 
     def srape_htmls(self) -> None:
+        start_time = datetime.now()
         while self.id_to_html:
             remaining = len(self.id_to_html)
             if remaining % 100 == 0:
                 print(f"{remaining} athletes left to scrape")
+                print(f"elapsed time: {datetime.now() - start_time}")
             i, html = self.id_to_html.popitem()
             self.scrape_athlete_page(i, html)
 
