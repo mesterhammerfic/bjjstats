@@ -130,6 +130,7 @@ def get_submission_data() -> Sequence[Row]:
               and method not IN ('N/A', 'Points', 'DQ', 'Referee Decision', 'Adv', 'Pen', '---', 'Advantages')
               and method not LIKE 'EBI%'
             group by method
+            having COUNT(*) > 40
             order by method asc
             """
         )
@@ -205,9 +206,10 @@ def render_submission_graph() -> str:
         subset = sub_athlete_df[sub_athlete_df["method"] == method]
         data = px.scatter(
             subset,
-            x="win_percent",
-            y="wins",
-            size="sub_per_win",
+            x="sub_per_win",
+            y="win_percent",
+            size="wins",
+            color="num_submissions",
             hover_data=["name", "num_submissions", "wins"],
             title=method,
         ).data[0]
@@ -247,9 +249,9 @@ def render_submission_graph() -> str:
         autosize=True,
         margin=dict(l=20, r=20, b=20, t=20, pad=20),
     )
-    fig.update_xaxes(title_text="Percentage of Wins by this Submission")
-    fig.update_yaxes(title_text="Total Win Percentage")
-    # i'll format the hover data to include the name, sub per win, and num submissions
+    fig.update_xaxes(title_text="Percentage of Wins by this Submission", range=[0, 100])
+    fig.update_yaxes(title_text="Total Win Percentage", range=[0, 100])
+
     fig.update_traces(
         hovertemplate="<br>".join(
             [
