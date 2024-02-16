@@ -1,10 +1,13 @@
-# this is a script that is based on the code writted in the notebooks directory
-# it scrapes the bjjheroes website and extracts the data into a set of parquet files
-# and then uploads them to s3
-# heres how you would execute the script
-# python extract.py 10 --output ./ to extract the data and save it to the current directory
-# or
-# python extract.py --s3 's3_folder_name' 10 to export them to s3
+"""
+this is a script that scrapes the bjjheroes website and extracts the data into a set of parquet files
+and then uploads them to s3.
+
+heres how you would execute the script on the command line:
+python extract.py --output ./
+or to upload to s3:
+python extract.py --s3 's3_folder_name'
+"""
+
 import os
 import argparse
 from typing import Optional, Any, Dict
@@ -21,11 +24,6 @@ import asyncio
 SOURCE_HOSTNAME = "https://www.bjjheroes.com"
 
 
-# because not all of the athletes are found in the a-z list, we need to scrape the
-# a-z list and then scrape the individual athlete pages to get all of the athletes
-# and their matches. In order to scrape the newly found athletes, I'm going to
-# write a recursive function that scrapes the athlete pages and then returns a list
-# of the newly found athlete pages.
 class Scraper:
     def __init__(self, num_to_scrape: Optional[int] = None):
         self.num_to_scrape = num_to_scrape
@@ -59,10 +57,9 @@ class Scraper:
 
     def get_athletes_from_source(self, html: str) -> None:
         """
-        This function scrapes the initial list of athletes from the bjjheroes website.
-        This is run one time.
+        This function scrapes the initial list of athletes from the bjjheroes website and populates the
+        self.athlete_df attribute.
         :param html: html string of the bjjheroes a-z list of athletes
-        :return: a dataframe of the athletes with their name, nickname, and url
         """
         soup = bs4.BeautifulSoup(html, "html.parser")
         table = soup.find_all("tr")
@@ -129,12 +126,10 @@ class Scraper:
             # check if the opponent is in the athlete_df, if not add them:
             opponent_name_cell = match_details[1]
             opponent_name = opponent_name_cell.find("span").text
-            opponent_url = opponent_name_cell.find("a")
-            if opponent_url is not None:
+            opponent_url_element = opponent_name_cell.find("a")
+            if opponent_url_element is not None:
                 # if there is a link, then we want to use that to find the athlete in the dataframe
-                opponent_url = (
-                    f"{SOURCE_HOSTNAME}{opponent_name_cell.find('a').get('href')}"
-                )
+                opponent_url = f"{SOURCE_HOSTNAME}{opponent_url_element.get('href')}"
                 if self.athlete_df[self.athlete_df["url"] == opponent_url].empty:
                     # if the opponent is not in the dataframe, we add them
                     opponent_id = len(self.athlete_df)
@@ -202,9 +197,9 @@ class Scraper:
         self,
     ) -> None:
         """
-        This function takes in the number of athletes to scrape and populates a mapping of athlete_id to a html string
-        representing the athlete's page.
-        :param num_to_scrape: the number of athletes to scrape before stopping, this is used for testing
+        This function uses asyncio to scrape the athlete pages in parallel.
+        When called, it only only downloads the html as a string and stores it in the id_to_html dictionary.
+        It only uses urls from the athlete_df attribute where the needs_scrape column is True.
         """
         athletes_to_scrape = self.athlete_df[self.athlete_df["needs_scrape"]]
         # We split the scraping into chunks of 100 to avoid a timeout error from asyncio
@@ -227,7 +222,15 @@ class Scraper:
         self,
     ) -> None:
         """
-        :param num_to_scrape: the number of athletes to scrape before stopping, this is used for testing
+        This scraper is complex due to the fact that not all athlete page links are located on the main
+        a-z list of athletes, some are found on the page of another athlete. This means that as we scrape the
+        athlete pages, we will find new athlete pages to scrape. This is why we use the needs_scrape column in the
+        athlete dataframe to keep track of which athletes still need to be scraped.
+
+        Also in order to improve the speed of the scraping, we use asyncio to download the htmls of the athlete
+        pages in parallel. However, we do not convert the html pages to BeautifulSoup objects in parallel because
+        this requires a lot of memory. In order to strike a medium between speed and memory usage, we download the
+        htmls in parallel and then convert them to BeautifulSoup objects in series.
         """
         start_time = datetime.now()
         res = requests.get(f"{SOURCE_HOSTNAME}/a-z-bjj-fighters-list")
@@ -247,7 +250,6 @@ class Scraper:
         self.athlete_df.drop(columns=["needs_scrape"], inplace=True)
 
 
-# the following function uses the output of the above function and sends it to s3
 def upload_to_s3(
     athlete_df: pd.DataFrame,
     matches_df: pd.DataFrame,
