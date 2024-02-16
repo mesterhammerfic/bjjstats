@@ -221,7 +221,6 @@ class Scraper:
     def scrape(
         self,
     ) -> None:
-        """ """
         start_time = datetime.now()
         res = requests.get(f"{SOURCE_HOSTNAME}/a-z-bjj-fighters-list")
         self.get_athletes_from_source(res.text)
