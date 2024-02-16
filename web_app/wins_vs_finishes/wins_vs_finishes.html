@@ -1,8 +1,44 @@
 <!DOCTYPE html>
 <html>
+<style>
+.container {
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  align-items: center;
+    justify-content: center;
+    display: flex;
+}
+.graph {
+  max-width: 50%;
+    height: 80%
+}
+    body {
+        font-family: Arial, sans-serif;
+    }
+h1 {
+        text-align: center;
+    }
+p {
+        text-align: center;
+    }
+</style>
 <body>
-<h1>Here's a Plotly graph!</h1>
-{{ fig }}
-<p>And here's some text after the graph.</p>
+<div class="graph_list">
+  <h1>Wins vs Finishes</h1>
+  <p> Finish % is calculated as the number of submissions out of the total number of wins for a given athlete. </p>
+<div class="container">
+<div class="graph">
+    {{ wins_vs_subs_graph }}
+</div>
+</div>
+    <h1>Submission Data</h1>
+  <p> Find which athletes are most successful with a particular submission </p>
+<div class="container">
+<div class="graph">
+    {{ submission_graph }}
+</div>
+</div>
+</div>
 </body>
 </html>
