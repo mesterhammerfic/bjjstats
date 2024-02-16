@@ -1,10 +1,13 @@
-# this script takes defines a function that takes in 3 dataframes
-# and loads them into the database. The dataframes are the athlete,
-# performance, and match tables.
-# here's how you would invoke it from the command line
-# DB_URL=[SECRET] python load.py directory_with_csv_files
-# or to load from s3 you would use the --s3 argument:
-# DB_URL=[SECRET] python load.py name_of_s3_folder --s3
+"""
+this script takes defines a function that takes in 3 dataframes
+and loads them into the database. The dataframes are the athlete,
+performance, and match tables.
+here's how you would invoke it from the command line
+DB_URL=[SECRET] python load.py directory_with_csv_files
+or to load from s3 you would use the --s3 argument:
+DB_URL=[SECRET] python load.py --s3 name_of_s3_folder
+"""
+
 from typing import Dict, Any
 
 import pandas as pd
@@ -110,8 +113,6 @@ if __name__ == "__main__":
         upload_from_s3(args.input, engine)
     else:
         athlete_df = pd.read_csv(os.path.join(args.input, "athlete.csv"))
-        if "needs_scrape" in athlete_df.columns:
-            athlete_df.drop("needs_scrape", axis=1, inplace=True)
         performance_df = pd.read_csv(
             os.path.join(args.input, "performance.csv"), index_col=0
         )
