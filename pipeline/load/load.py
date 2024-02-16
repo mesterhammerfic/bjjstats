@@ -33,57 +33,31 @@ def upload_data(
     :param match_df:
     :param engine: the sqlalchemy engine to use
     """
-    # here i check whether its a postgres or sqlite database
-    if "sqlite" in engine.url.drivername:
-        with engine.connect() as con:
+    with engine.begin() as con:
+        # here i check whether its a postgres or sqlite database
+        if "sqlite" in engine.url.drivername:
             print("deleting existing data")
             statement = sa.text("DELETE FROM athlete;")
             con.execute(statement)
-            con.commit()
             statement = sa.text("DELETE FROM performance;")
             con.execute(statement)
-            con.commit()
             statement = sa.text("DELETE FROM match;")
             con.execute(statement)
-            con.commit()
-    else:
-        # here i'll truncate all the tables in one go and reset the index
-        with engine.connect() as con:
+        elif "postgres" in engine.url.drivername:
+            # here i'll truncate all the tables in one go and reset the index
             print("deleting existing data")
             statement = sa.text(
                 "TRUNCATE athlete, performance, match RESTART IDENTITY;"
             )
             con.execute(statement)
-            con.commit()
-
-    print("uploading athlete data")
-    athlete_df.to_sql(
-        "athlete",
-        engine,
-        if_exists="append",
-        index=True,
-        method="multi",
-        chunksize=CHUNKSIZE,
-    )
-    print("uploading match data")
-    match_df.to_sql(
-        "match",
-        engine,
-        if_exists="append",
-        index=True,
-        method="multi",
-        chunksize=CHUNKSIZE,
-    )
-    print("uploading performance data")
-    performance_df.to_sql(
-        "performance",
-        engine,
-        if_exists="append",
-        index=False,
-        method="multi",
-        chunksize=CHUNKSIZE,
-    )
-    print("upload complete")
+        print("loading data")
+        match_df.to_sql("match", con, if_exists="append", index=False, method="multi")
+        athlete_df.to_sql(
+            "athlete", con, if_exists="append", index=False, method="multi"
+        )
+        performance_df.to_sql(
+            "performance", con, if_exists="append", index=False, method="multi"
+        )
 
 
 def upload_from_s3(
@@ -135,11 +109,13 @@ if __name__ == "__main__":
     if args.s3:
         upload_from_s3(args.input, engine)
     else:
-        athlete_df = pd.read_csv(os.path.join(args.input, "athlete.csv"), index_col=0)
+        athlete_df = pd.read_csv(os.path.join(args.input, "athlete.csv"))
+        if "needs_scrape" in athlete_df.columns:
+            athlete_df.drop("needs_scrape", axis=1, inplace=True)
         performance_df = pd.read_csv(
             os.path.join(args.input, "performance.csv"), index_col=0
         )
-        match_df = pd.read_csv(os.path.join(args.input, "match.csv"), index_col=0)
+        match_df = pd.read_csv(os.path.join(args.input, "match.csv"))
         upload_data(athlete_df, performance_df, match_df, engine)
     engine.dispose()
     print("data loaded")
