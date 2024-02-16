@@ -154,7 +154,7 @@ class Scraper:
                     self.athlete_df.loc[opponent_id] = [
                         opponent_name,
                         "",
-                        opponent_url,
+                        "",
                         False,
                     ]
                 else:
