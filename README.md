@@ -1,5 +1,8 @@
 # bjjstats
 A dashboard app to visualize the records of the top Brazilian Jiu Jitsu athletes.
+The purpose of this project is to try out Lambda, Step Functions, and EventBridge for setting up
+an automated pipeline and to test out creating a public web app with API Gateway and Lambda, just
+to see how viable that is for custom dashboards. I'll soon be trying out IaC with Terraform soon as well.
 
 ## Architecture
 Batch ETL design:
