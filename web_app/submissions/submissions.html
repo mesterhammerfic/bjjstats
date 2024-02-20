@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<style>
+.container {
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  align-items: center;
+    justify-content: center;
+    display: flex;
+}
+.graph {
+  max-width: 50%;
+    height: 80%
+}
+    body {
+        font-family: Arial, sans-serif;
+    }
+h1 {
+        text-align: center;
+    }
+p {
+        text-align: center;
+    }
+form {
+        text-align: center;
+    }
+</style>
+<body>
+
+<div>
+    <h1>Submission Data for: {{ submission }}</h1>
+    <form action="/submissions" method="post">
+    <label for="submission">Choose a submission:</label>
+    <select id="submission" name="submission">
+      {% for submission in submission_list %}
+      <option
+              value="{{ submission[0] }}"
+      >
+          {{ submission[0] }} ({{ submission[1]}})
+      </option>
+      {% endfor %}
+    </select>
+        the submit button will link to the same page
+    <input type="submit" value="Submit">
+  </form>
+  <p> Find which athletes are most successful with a particular submission.</p>
+  <p>Look for larger, warmer data points towards the top of the graph.</p>
+<div class="container">
+<div class="graph">
+    {{ submission_graph }}
+</div>
+</div>
+</div>
+</body>
+</html>
