@@ -33,7 +33,7 @@ class Athlete:
     url: str
 
     def to_csv_row(self) -> str:
-        return f"{self.id},{self.name},{self.nickname},{self.url}"
+        return f'{self.id},"{self.name}","{self.nickname}","{self.url}"'
 
     def __hash__(self) -> int:
         return hash((self.id, self.name, self.nickname, self.url))
@@ -59,7 +59,7 @@ class Match:
     weight: str
 
     def to_csv_row(self) -> str:
-        return f"{self.id},{self.year},{self.competition},{self.method},{self.stage},{self.weight}"
+        return f'{self.id},{self.year},"{self.competition}","{self.method}","{self.stage}","{self.weight}"'
 
     def __hash__(self) -> int:
         return hash(
@@ -86,7 +86,7 @@ class Performance:
     result: str
 
     def to_csv_row(self) -> str:
-        return f"{self.match_id},{self.athlete_id},{self.result}"
+        return f'{self.match_id},{self.athlete_id},"{self.result}"'
 
     def __hash__(self) -> int:
         return hash((self.match_id, self.athlete_id, self.result))
@@ -186,7 +186,7 @@ class Scraper:
         else:
             self.name_search[athlete.name] = athlete.id
 
-    def get_athletes_from_source(self, html: str) -> None:
+    def get_initial_athlete_list(self, html: str) -> None:
         """
         This function scrapes the initial list of athletes from the bjjheroes website
         :param html: html string of the bjjheroes a-z list of athletes
@@ -253,13 +253,15 @@ class Scraper:
             # check if the opponent has been scraped yet:
             opponent_name_cell = match_details[1]
             opponent_name = opponent_name_cell.find("span").text
+            if opponent_name.lower() in ["n/a", "na"]:
+                opponent_name = "Unknown"
             opponent_url_element = opponent_name_cell.find("a")
             if opponent_url_element is not None:
                 # if there is a link, then we want to use that to find the athlete in the dataframe
                 opponent_url = f"{SOURCE_HOSTNAME}{opponent_url_element.get('href')}"
                 opponent_id = self.url_search.get(opponent_url)
                 if opponent_id is None:
-                    opponent_id = len(self.athletes)
+                    opponent_id = len(self.athletes) + 1
                     self.add_athlete(
                         Athlete(
                             id=opponent_id,
@@ -272,7 +274,7 @@ class Scraper:
                 opponent_id = self.name_search.get(opponent_name)
                 if opponent_id is None:
                     # we have not scraped this athlete yet
-                    opponent_id = len(self.athletes)
+                    opponent_id = len(self.athletes) + 1
                     self.add_athlete(
                         Athlete(
                             id=opponent_id,
@@ -296,7 +298,7 @@ class Scraper:
                     )
                 )
 
-    def scrape_htmls(self) -> None:
+    def clear_scrape_queue(self) -> None:
         start_time = datetime.now()
         while self.scrape_queue:
             remaining = len(self.scrape_queue)
@@ -308,28 +310,31 @@ class Scraper:
             i, html = self.scrape_queue.pop()
             self.scrape_athlete_page(i, html)
 
-    async def get_page(
+    async def add_page_to_scrape_queue(
         self,
         session: aiohttp.ClientSession,
         athlete_id: int,
         url: str,
     ) -> None:
+        """
+        This function downloads the html of the athlete page and adds it to the scrape queue
+        """
         async with session.get(url) as response:
             try:
                 page = await response.text()
-                self.scrape_athlete_page(athlete_id, page)
+                self.scrape_queue.add((athlete_id, page))
             except Exception as e:
                 print(f"could not download page {url}")
                 print("due to the following error")
                 print(e)
 
-    async def get_athlete_pages(
+    async def clear_download_queue(
         self,
     ) -> None:
         """
         This function uses asyncio to scrape the athlete pages in parallel.
-        When called, it only only downloads the html as a string and stores it in the id_to_html dictionary.
-        It only uses urls from the athlete_df attribute where the needs_scrape column is True.
+        When called, it downloads the html from all the athlete pages in the download_queue
+        and adds the html to the scrape_queue.
         """
         # We split the scraping into chunks of 100 to avoid a timeout error from asyncio
         step = 0
@@ -342,7 +347,7 @@ class Scraper:
                     if not self.download_queue:
                         break
                     id_, url = self.download_queue.pop()
-                    tasks.append(self.get_page(session, id_, url))
+                    tasks.append(self.add_page_to_scrape_queue(session, id_, url))
                 await asyncio.gather(*tasks)
             print(
                 f"scrape {self.scrape_iteration}, download step {step}/{total_steps} took {datetime.now() - step_start_time}"
@@ -354,13 +359,14 @@ class Scraper:
     ) -> None:
         start_time = datetime.now()
         res = requests.get(f"{SOURCE_HOSTNAME}/a-z-bjj-fighters-list")
-        self.get_athletes_from_source(res.text)
+        self.get_initial_athlete_list(res.text)
         self.scrape_iteration = 0
         while self.download_queue:
             print(
                 f"found {len(self.download_queue)} athletes to scrape, starting scrape {self.scrape_iteration}"
             )
-            asyncio.run(self.get_athlete_pages())
+            asyncio.run(self.clear_download_queue())
+            self.clear_scrape_queue()
             print(f"finished scrape {self.scrape_iteration}")
             self.scrape_iteration += 1
         print(f"total time: {datetime.now() - start_time}")
@@ -412,7 +418,3 @@ if __name__ == "__main__":
         scraper.upload_to_s3(args.s3)
     if args.output:
         scraper.output_to_csv(args.output)
-    else:
-        print(scraper.athlete_csv)
-        print(scraper.match_csv)
-        print(scraper.performance_csv)
