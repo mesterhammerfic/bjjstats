@@ -112,6 +112,7 @@ def get_submission_data() -> Sequence[Row]:
 
 
 def render_submission_graph(submission: str) -> str:
+    print(f"getting records for {submission}")
     sub_athlete_data = get_submission_athlete_data(submission)
     sub_athlete_df = pd.DataFrame(
         sub_athlete_data,
@@ -128,6 +129,7 @@ def render_submission_graph(submission: str) -> str:
     # the y axis is the sub percent, and the size and color of the points are the wins
     # as a heat map
     # the hover data is the name, number of submissions, win percent, and total wins
+    print("creating figure")
     fig = px.scatter(
         sub_athlete_df,
         x="submissions",
@@ -155,12 +157,14 @@ def render_submission_graph(submission: str) -> str:
             ]
         )
     )
+    print("converting plot to html")
     html_fig: str = fig.to_html(full_html=False)
     return html_fig
 
 
 def create_full_html(submission: str) -> str:
     submission_graph = render_submission_graph(submission)
+    print("creating html")
     plotly_jinja_data = {
         "submission_graph": submission_graph,
         "submission_list": get_submission_data(),
