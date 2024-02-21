@@ -8,14 +8,15 @@ or to upload to s3:
 python extract.py --s3 's3_folder_name'
 """
 
+import dataclasses
 import os
 import argparse
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Set, Tuple
 from datetime import datetime
 
 import bs4
-import requests  # type: ignore
 import pandas as pd
+import requests  # type: ignore
 from aws_lambda_powertools.utilities.data_classes import ALBEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
 import aiohttp
@@ -24,59 +25,187 @@ import asyncio
 SOURCE_HOSTNAME = "https://www.bjjheroes.com"
 
 
+@dataclasses.dataclass(frozen=True)
+class Athlete:
+    id: int
+    name: str
+    nickname: str
+    url: str
+
+    def to_csv_row(self) -> str:
+        return f'{self.id},"{self.name}","{self.nickname}","{self.url}"'
+
+    def __hash__(self) -> int:
+        return hash((self.id, self.name, self.nickname, self.url))
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Athlete):
+            return False
+        return (
+            self.id == other.id
+            and self.name == other.name
+            and self.nickname == other.nickname
+            and self.url == other.url
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class Match:
+    id: int
+    year: str
+    competition: str
+    method: str
+    stage: str
+    weight: str
+
+    def to_csv_row(self) -> str:
+        return f'{self.id},{self.year},"{self.competition}","{self.method}","{self.stage}","{self.weight}"'
+
+    def __hash__(self) -> int:
+        return hash(
+            (self.id, self.year, self.competition, self.method, self.stage, self.weight)
+        )
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Match):
+            return False
+        return (
+            self.id == other.id
+            and self.year == other.year
+            and self.competition == other.competition
+            and self.method == other.method
+            and self.stage == other.stage
+            and self.weight == other.weight
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class Performance:
+    match_id: int
+    athlete_id: int
+    result: str
+
+    def to_csv_row(self) -> str:
+        return f'{self.match_id},{self.athlete_id},"{self.result}"'
+
+    def __hash__(self) -> int:
+        return hash((self.match_id, self.athlete_id, self.result))
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Performance):
+            return False
+        return (
+            self.match_id == other.match_id
+            and self.athlete_id == other.athlete_id
+            and self.result == other.result
+        )
+
+
 class Scraper:
     def __init__(self, num_to_scrape: Optional[int] = None):
         self.num_to_scrape = num_to_scrape
-        self.id_to_html: Dict[int, str] = {}
-        self.athlete_df = pd.DataFrame(
-            columns=[
-                "name",
-                "nickname",
-                "url",
-                "needs_scrape",
-            ]
+
+        self.download_queue: Set[Tuple[int, str]] = set()
+        self.scrape_queue: Set[Tuple[int, str]] = set()
+        self.scrape_iteration: int = 0
+
+        self.url_search: Dict[str, int] = {}
+        self.name_search: Dict[str, int] = {}
+
+        self.athletes: Set[Athlete] = set()
+        self.matches: Set[Match] = set()
+        self.performances: Set[Performance] = set()
+
+    @property
+    def athlete_csv(self) -> str:
+        header = "id,name,nickname,url"
+        rows = [a.to_csv_row() for a in self.athletes]
+        return "\n".join([header] + rows)
+
+    @property
+    def match_csv(self) -> str:
+        header = "id,year,competition,method,stage,weight"
+        rows = [m.to_csv_row() for m in self.matches]
+        return "\n".join([header] + rows)
+
+    @property
+    def performance_csv(self) -> str:
+        header = "match_id,athlete_id,result"
+        rows = [p.to_csv_row() for p in self.performances]
+        return "\n".join([header] + rows)
+
+    def upload_to_s3(self, s3_folder: str) -> None:
+        athlete_columns = ["id", "name", "nickname", "url"]
+        athlete_df = pd.DataFrame(
+            [[a.id, a.name, a.nickname, a.url] for a in self.athletes],
+            columns=athlete_columns,
         )
-        self.matches_df = pd.DataFrame(
-            columns=[
-                "id",
-                "year",
-                "competition",
-                "method",
-                "stage",
-                "weight",
-            ]
+        match_columns = ["id", "year", "competition", "method", "stage", "weight"]
+        match_df = pd.DataFrame(
+            [
+                [m.id, m.year, m.competition, m.method, m.stage, m.weight]
+                for m in self.matches
+            ],
+            columns=match_columns,
         )
-        self.matches_df.set_index("id", inplace=True)
-        self.performances_df = pd.DataFrame(
-            columns=[
-                "match_id",
-                "athlete_id",
-                "result",
-            ]
+        performance_columns = ["match_id", "athlete_id", "result"]
+        performance_df = pd.DataFrame(
+            [[p.match_id, p.athlete_id, p.result] for p in self.performances],
+            columns=performance_columns,
+        )
+        athlete_df.to_parquet(
+            f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/athlete.parquet"
+        )
+        match_df.to_parquet(
+            f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/match.parquet"
+        )
+        performance_df.to_parquet(
+            f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/performance.parquet"
         )
 
-    def get_athletes_from_source(self, html: str) -> None:
+    def output_to_csv(self, output_dir: str) -> None:
+        with open(os.path.join(output_dir, "athlete.csv"), "w") as f:
+            f.write(self.athlete_csv)
+        with open(os.path.join(output_dir, "match.csv"), "w") as f:
+            f.write(self.match_csv)
+        with open(os.path.join(output_dir, "performance.csv"), "w") as f:
+            f.write(self.performance_csv)
+
+    def add_athlete(self, athlete: Athlete) -> None:
         """
-        This function scrapes the initial list of athletes from the bjjheroes website and populates the
-        self.athlete_df attribute.
+        This should be the only place that a url is added to the download queue
+        otherwise we might end up in an infinite loop
+        :param athlete:
+        :return:
+        """
+        self.athletes.add(athlete)
+        if athlete.url:
+            self.url_search[athlete.url] = athlete.id
+            if self.num_to_scrape is None or len(self.athletes) <= self.num_to_scrape:
+                self.download_queue.add((athlete.id, athlete.url))
+        else:
+            self.name_search[athlete.name] = athlete.id
+
+    def get_initial_athlete_list(self, html: str) -> None:
+        """
+        This function scrapes the initial list of athletes from the bjjheroes website
         :param html: html string of the bjjheroes a-z list of athletes
         """
         soup = bs4.BeautifulSoup(html, "html.parser")
         table = soup.find_all("tr")
-        results = []
-        for row in table:
+        for rowNumber, row in enumerate(table):
             data = row.find_all("td")
             if data:
                 name = f"{data[0].text} {data[1].text}"
                 name = name.replace("  ", " ")
-                a = dict(
-                    name=name,
-                    nickname=data[2].text,
-                    url=f"{SOURCE_HOSTNAME}{data[0].find('a').get('href')}",
-                    needs_scrape=True,  # this value is true until the athlete has been scraped
+                self.add_athlete(
+                    Athlete(
+                        id=rowNumber,
+                        name=name,
+                        nickname=data[2].text,
+                        url=f"{SOURCE_HOSTNAME}{data[0].find('a').get('href')}",
+                    )
                 )
-                results.append(a)
-        self.athlete_df = pd.DataFrame(results)
 
     def scrape_athlete_page(self, athlete_id: int, html: str) -> None:
         """
@@ -90,7 +219,6 @@ class Scraper:
         table = bs.find("table", {"class": "table table-striped sort_table"})
         if table is None:
             # this is an athlete that has no recorded matches
-            self.athlete_df.loc[athlete_id, "needs_scrape"] = False
             return
         body = table.find("tbody")
         rows = body.find_all("tr")
@@ -104,170 +232,144 @@ class Scraper:
             weight = match_details[5].text
             stage = match_details[6].text
             year = match_details[7].text
-
-            # check if the match is in the matches_df, the match_id is from another
-            # source so we need to check if it is already in the dataframe:
-            match = self.matches_df[self.matches_df.index == match_id]
-            if match.empty:
-                self.matches_df.loc[match_id] = [
-                    year,
-                    competition,
-                    method,
-                    stage,
-                    weight,
-                ]
+            self.matches.add(
+                Match(
+                    id=match_id,
+                    year=year,
+                    competition=competition,
+                    method=method,
+                    stage=stage,
+                    weight=weight,
+                )
+            )
             # add the performance to the performances_df
-            self.performances_df.loc[len(self.performances_df)] = [
-                match_id,
-                athlete_id,
-                result,
-            ]
-
-            # check if the opponent is in the athlete_df, if not add them:
+            self.performances.add(
+                Performance(
+                    match_id=match_id,
+                    athlete_id=athlete_id,
+                    result=result,
+                )
+            )
+            # check if the opponent has been scraped yet:
             opponent_name_cell = match_details[1]
             opponent_name = opponent_name_cell.find("span").text
+            if opponent_name.lower() in ["n/a", "na"]:
+                opponent_name = "Unknown"
             opponent_url_element = opponent_name_cell.find("a")
             if opponent_url_element is not None:
                 # if there is a link, then we want to use that to find the athlete in the dataframe
                 opponent_url = f"{SOURCE_HOSTNAME}{opponent_url_element.get('href')}"
-                if self.athlete_df[self.athlete_df["url"] == opponent_url].empty:
-                    # if the opponent is not in the dataframe, we add them
-                    opponent_id = len(self.athlete_df)
-                    self.athlete_df.loc[opponent_id] = [
-                        opponent_name,
-                        "",
-                        opponent_url,
-                        True,
-                    ]
+                opponent_id = self.url_search.get(opponent_url)
+                if opponent_id is None:
+                    opponent_id = len(self.athletes) + 1
+                    self.add_athlete(
+                        Athlete(
+                            id=opponent_id,
+                            name=opponent_name,
+                            nickname="",
+                            url=opponent_url,
+                        )
+                    )
             else:
-                # if there is no link, we use the name string to find the athlete in the dataframe
-                if opponent_name.lower() in ["n/a", "na"]:
-                    # pandas parses N/A as NaN so we replace it with a string
-                    # so we don't violate the non-null constraint
-                    opponent_name = "Unknown"
-                opponent_id_row = self.athlete_df[
-                    self.athlete_df["name"] == opponent_name
-                ].index
-                if opponent_id_row.empty:
-                    # we couldn't find the opponent in the dataframe so we add them
-                    opponent_id = len(self.athlete_df)
-                    self.athlete_df.loc[opponent_id] = [
-                        opponent_name,
-                        "",
-                        "",
-                        False,
-                    ]
-                else:
-                    opponent_id = opponent_id_row[0]
+                opponent_id = self.name_search.get(opponent_name)
+                if opponent_id is None:
+                    # we have not scraped this athlete yet
+                    opponent_id = len(self.athletes) + 1
+                    self.add_athlete(
+                        Athlete(
+                            id=opponent_id,
+                            name=opponent_name,
+                            nickname="",
+                            url="",
+                        )
+                    )
+                # we have to reverse the result for the opponent
                 if result == "W":
                     opponent_result = "L"
                 elif result == "L":
                     opponent_result = "W"
                 else:
                     opponent_result = "D"
-                self.performances_df.loc[len(self.performances_df)] = [
-                    match_id,
-                    opponent_id,
-                    opponent_result,
-                ]
-        self.athlete_df.loc[athlete_id, "needs_scrape"] = False
+                self.performances.add(
+                    Performance(
+                        match_id=match_id,
+                        athlete_id=opponent_id,
+                        result=opponent_result,
+                    )
+                )
 
-    def srape_htmls(self) -> None:
+    def clear_scrape_queue(self) -> None:
         start_time = datetime.now()
-        while self.id_to_html:
-            remaining = len(self.id_to_html)
+        while self.scrape_queue:
+            remaining = len(self.scrape_queue)
             if remaining % 100 == 0:
-                print(f"{remaining} athletes left to scrape")
+                print(
+                    f"{remaining} athletes left to scrape for scrape {self.scrape_iteration}"
+                )
                 print(f"elapsed time: {datetime.now() - start_time}")
-            i, html = self.id_to_html.popitem()
+            i, html = self.scrape_queue.pop()
             self.scrape_athlete_page(i, html)
 
-    async def get_page(
+    async def add_page_to_scrape_queue(
         self,
         session: aiohttp.ClientSession,
-        url: str,
         athlete_id: int,
+        url: str,
     ) -> None:
+        """
+        This function downloads the html of the athlete page and adds it to the scrape queue
+        """
         async with session.get(url) as response:
             try:
                 page = await response.text()
-                self.id_to_html[athlete_id] = page
+                self.scrape_queue.add((athlete_id, page))
             except Exception as e:
-                print(f"could not scrape {url}")
+                print(f"could not download page {url}")
                 print("due to the following error")
                 print(e)
-                self.athlete_df.loc[athlete_id, "needs_scrape"] = False
 
-    async def get_athlete_pages(
+    async def clear_download_queue(
         self,
     ) -> None:
         """
         This function uses asyncio to scrape the athlete pages in parallel.
-        When called, it only only downloads the html as a string and stores it in the id_to_html dictionary.
-        It only uses urls from the athlete_df attribute where the needs_scrape column is True.
+        When called, it downloads the html from all the athlete pages in the download_queue
+        and adds the html to the scrape_queue.
         """
-        athletes_to_scrape = self.athlete_df[self.athlete_df["needs_scrape"]]
         # We split the scraping into chunks of 100 to avoid a timeout error from asyncio
-        for i in range(0, len(athletes_to_scrape), 100):
-            if self.num_to_scrape is not None and i >= self.num_to_scrape:
-                break
+        step = 0
+        total_steps = len(self.download_queue) // 100
+        while self.download_queue:
             step_start_time = datetime.now()
             async with aiohttp.ClientSession() as session:
                 tasks = []
-                for id_, athlete in athletes_to_scrape.iloc[i : i + 100].iterrows():
-                    tasks.append(self.get_page(session, athlete["url"], id_))
-                    count = id_ + 1
-                    if self.num_to_scrape is not None and count == self.num_to_scrape:
-                        self.athlete_df["needs_scrape"] = False
+                for i in range(100):
+                    if not self.download_queue:
                         break
+                    id_, url = self.download_queue.pop()
+                    tasks.append(self.add_page_to_scrape_queue(session, id_, url))
                 await asyncio.gather(*tasks)
-            print(f"step {i} took {datetime.now() - step_start_time}")
+            print(
+                f"scrape {self.scrape_iteration}, download step {step}/{total_steps} took {datetime.now() - step_start_time}"
+            )
+            step += 1
 
     def scrape(
         self,
     ) -> None:
         start_time = datetime.now()
         res = requests.get(f"{SOURCE_HOSTNAME}/a-z-bjj-fighters-list")
-        self.get_athletes_from_source(res.text)
-        i = 0
-        while self.athlete_df["needs_scrape"].any():
+        self.get_initial_athlete_list(res.text)
+        self.scrape_iteration = 0
+        while self.download_queue:
             print(
-                f"found {self.athlete_df['needs_scrape'].sum()} athletes to scrape, starting round {i}"
+                f"found {len(self.download_queue)} athletes to scrape, starting scrape {self.scrape_iteration}"
             )
-            asyncio.run(self.get_athlete_pages())
-            print("finished downloading htmls")
-            self.srape_htmls()
-            print(f"finished scraping round {i}")
-            i += 1
+            asyncio.run(self.clear_download_queue())
+            self.clear_scrape_queue()
+            print(f"finished scrape {self.scrape_iteration}")
+            self.scrape_iteration += 1
         print(f"total time: {datetime.now() - start_time}")
-        self.athlete_df.index.name = "id"
-        self.athlete_df.drop(columns=["needs_scrape"], inplace=True)
-
-
-def upload_to_s3(
-    athlete_df: pd.DataFrame,
-    matches_df: pd.DataFrame,
-    performances_df: pd.DataFrame,
-    s3_folder: str,
-) -> None:
-    """
-    This function takes in the dataframes and uploads them to s3
-    :param athlete_df: the athletes dataframe
-    :param matches_df: the matches dataframe
-    :param performances_df: the performances dataframe
-    :param s3_folder: the s3 folder to upload to
-    """
-    print("uploading to s3")
-    athlete_df.to_parquet(
-        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/athlete.parquet"
-    )
-    matches_df.to_parquet(
-        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/match.parquet"
-    )
-    performances_df.to_parquet(
-        f"s3://bjjstats/bjjheroes-scrape-v1/{s3_folder}/performance.parquet"
-    )
-    print("upload complete")
 
 
 def lambda_handler(event: ALBEvent, context: LambdaContext) -> dict[str, Any]:
@@ -280,9 +382,7 @@ def lambda_handler(event: ALBEvent, context: LambdaContext) -> dict[str, Any]:
     s3_folder = event.get("s3_folder")
     if s3_folder is None:
         s3_folder = datetime.now().strftime("%Y-%m-%d")
-    upload_to_s3(
-        scraper.athlete_df, scraper.matches_df, scraper.performances_df, s3_folder
-    )
+    scraper.upload_to_s3(s3_folder)
     return {
         "statusCode": 200,
         "body": "upload complete",
@@ -315,14 +415,6 @@ if __name__ == "__main__":
     scraper = Scraper(args.num_to_scrape)
     scraper.scrape()
     if args.s3:
-        upload_to_s3(
-            scraper.athlete_df, scraper.matches_df, scraper.performances_df, args.s3
-        )
+        scraper.upload_to_s3(args.s3)
     if args.output:
-        scraper.athlete_df.to_csv(os.path.join(args.output, "athlete.csv"))
-        scraper.matches_df.to_csv(os.path.join(args.output, "match.csv"))
-        scraper.performances_df.to_csv(os.path.join(args.output, "performance.csv"))
-    else:
-        print(scraper.athlete_df)
-        print(scraper.matches_df)
-        print(scraper.performances_df)
+        scraper.output_to_csv(args.output)

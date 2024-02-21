@@ -54,9 +54,9 @@ def upload_data(
             )
             con.execute(statement)
         print("loading data")
-        match_df.to_sql("match", con, if_exists="append", index=True, method="multi")
+        match_df.to_sql("match", con, if_exists="append", index=False, method="multi")
         athlete_df.to_sql(
-            "athlete", con, if_exists="append", index=True, method="multi"
+            "athlete", con, if_exists="append", index=False, method="multi"
         )
         performance_df.to_sql(
             "performance", con, if_exists="append", index=False, method="multi"
@@ -111,11 +111,9 @@ if __name__ == "__main__":
     if args.s3:
         upload_from_s3(args.input, engine)
     else:
-        athlete_df = pd.read_csv(os.path.join(args.input, "athlete.csv"), index_col=0)
-        performance_df = pd.read_csv(
-            os.path.join(args.input, "performance.csv"), index_col=0
-        )
-        match_df = pd.read_csv(os.path.join(args.input, "match.csv"), index_col=0)
+        athlete_df = pd.read_csv(os.path.join(args.input, "athlete.csv"))
+        performance_df = pd.read_csv(os.path.join(args.input, "performance.csv"))
+        match_df = pd.read_csv(os.path.join(args.input, "match.csv"))
         upload_data(athlete_df, performance_df, match_df, engine)
     engine.dispose()
     print("data loaded")
