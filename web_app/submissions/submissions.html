@@ -22,28 +22,27 @@ h1 {
 p {
         text-align: center;
     }
-form {
-        text-align: center;
+.submission_selector {
+    text-align: center;
+    margin: 20px;
     }
 </style>
 <body>
 
 <div>
     <h1>Submission Data for: {{ submission }}</h1>
-    <form action="/submissions" method="post">
-    <label for="submission">Choose a submission:</label>
-    <select id="submission" name="submission">
+    <div class="submission_selector">
+    <select id="submission" name="submission" onChange="window.location.href=this.value">
       {% for submission in submission_list %}
       <option
-              value="{{ submission[0] }}"
+              value="/submissions/?submission={{ submission[0] }}"
       >
           {{ submission[0] }} ({{ submission[1]}})
       </option>
       {% endfor %}
     </select>
-        the submit button will link to the same page
-    <input type="submit" value="Submit">
-  </form>
+    </div>
+
   <p> Find which athletes are most successful with a particular submission.</p>
   <p>Look for larger, warmer data points towards the top of the graph.</p>
 <div class="container">

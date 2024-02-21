@@ -142,7 +142,7 @@ def render_submission_graph(submission: str) -> str:
         margin=dict(l=20, r=20, b=20, t=20, pad=20),
     )
     fig.update_xaxes(title_text=f"Number of Wins by {submission}")
-    fig.update_yaxes(title_text=f"Percentage of Wins by {submission}")
+    fig.update_yaxes(title_text=f"% of Wins by {submission}")
 
     fig.update_traces(
         hovertemplate="<br>".join(
@@ -174,7 +174,7 @@ def create_full_html(submission: str) -> str:
 
 
 def handler(event: ALBEvent, context: LambdaContext) -> dict[str, Any]:
-    submission = event["pathParameters"]["submission"]
+    submission = event.get("queryStringParameters", {}).get("submission", "Armbar")
     res = {
         "statusCode": 200,
         "headers": {"Content-Type": "*/*"},
