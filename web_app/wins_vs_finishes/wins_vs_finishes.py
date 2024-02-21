@@ -72,6 +72,7 @@ def get_records() -> Sequence[Row]:
 
 
 def render_wins_vs_subs_graph() -> str:
+    print("getting records")
     dataframe = pd.DataFrame(
         get_records(),
         columns=[
@@ -89,6 +90,7 @@ def render_wins_vs_subs_graph() -> str:
     dataframe["sub percent"] = dataframe["sub percent"].astype(float)
     # fill nulls with 0
     dataframe.fillna(0, inplace=True)
+    print("creating figure")
     wins_subs_fig = px.scatter(
         dataframe,
         x="win percent",
@@ -114,12 +116,14 @@ def render_wins_vs_subs_graph() -> str:
             ]
         )
     )
+    print("converting plot to html")
     html_fig: str = wins_subs_fig.to_html(full_html=False)
     return html_fig
 
 
 def create_full_html() -> str:
     wins_vs_subs_graph = render_wins_vs_subs_graph()
+    print("rendering full html")
     plotly_jinja_data = {
         "wins_vs_subs_graph": wins_vs_subs_graph,
     }
