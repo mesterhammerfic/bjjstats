@@ -4,29 +4,27 @@ The purpose of this project is to try out Lambda, Step Functions, and EventBridg
 an automated pipeline and to test out creating a public web app with API Gateway and Lambda, just
 to see how viable that is for custom dashboards. I'll soon be trying out IaC with Terraform soon as well.
 
-## Architecture
-Batch ETL design:
-![Alt text](img/bjjstats-system-design.png)
-#### Key behavior of this design
-Once a month, the entire warehouse is deleted and recreated using the
-latest data pulled from the website. When the data is pulled each month,
-it is stored in s3 before it is loaded into the warehouse. The lambda
-functions are stored as Docker containers in ECS.
+#### Findings:
+- Lambda is great for running small, stateless functions, but it's not great for running long-running
+processes.
+- Step Functions are easy to set up and troubleshooting is easy with the visual interface.
+- Plotly is too slow in the implementation I set up here, with the endpoints taking about 2 minutes to
+return a response.
 
-##### Why this design?
-This design is chosen because it is simple and cost-effective. I could
-choose to insert only the newest matches that were added to the source
-data, but this would require complex logic to determine which matches
-are already in the database.
+## Architecture
+ETL design:
+![Alt text](img/bjjstats-system-design.png)
+The pipeline is triggered by an eventbridge rule that runs the ETL process once a month.
+
 
 Todo list:
 
 - [x] write first web app endpoint with test data
 - [x] write load function script
 - [x] write async extract and transform function script
-- [ ] create docker containers for extract and load functions
-- [ ] set up lambda functions to run the docker containers
-- [ ] set up step function to automate the ETL pipeline with eventbridge
+- [x] create docker containers for extract and load functions
+- [x] set up lambda functions to run the docker containers
+- [x] set up step function to automate the ETL pipeline with eventbridge
 event to schedule regular data updates
 
 --------------------------------
@@ -89,13 +87,16 @@ one performance from each athlete participating in the match
 
 ### Scraper (Extract and Transform Lambda)
 <img src="img/scraper.png" alt="image" width="400" height="auto">
+
+###### note: this was refactored to not use dataframes because they were too slow. The process is still the same, but the data is stored in sets of objects instead of dataframes.
+
 In the diagram above, the blue circles represent the data that the scraper returns, and the green
-squares represent processes that will be run in a loop until all the athletes in the dataframe have
+squares represent processes that will be run in a loop until all the athletes in the ~~dataframe~~ set have
 been marked as done.
 
 This scraper is complicated due to the fact that not all athlete page links are located on the main
 a-z list of athletes, some are found on the pages of other athletes. This means that as we scrape the
-athlete pages, we will find new athlete pages to scrape. We use a column in the athlete dataframe to
+athlete pages, we will find new athlete pages to scrape. We use a column in the athlete ~~dataframe~~ set to
 track which pages have been scraped and which have not.
 
 Also in order to improve the speed of the scraping, we use asyncio to download the htmls of the athlete
