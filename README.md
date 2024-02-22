@@ -4,6 +4,11 @@ The purpose of this project is to try out Lambda, Step Functions, and EventBridg
 an automated pipeline and to test out creating a public web app with API Gateway and Lambda, just
 to see how viable that is for custom dashboards. I'll soon be trying out IaC with Terraform soon as well.
 
+Try it out here:
+
+[Athlete records](https://ubvm14s94e.execute-api.us-east-2.amazonaws.com/)
+
+[Submission Exploration](https://ubvm14s94e.execute-api.us-east-2.amazonaws.com/submissions)
 #### Findings:
 - Lambda is great for running small, stateless functions, but it's not great for running long-running
 processes.

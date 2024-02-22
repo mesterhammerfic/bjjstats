@@ -35,7 +35,7 @@ p {
     <select id="submission" name="submission" onChange="window.location.href=this.value">
       {% for submission in submission_list %}
       <option
-              value="/submissions/?submission={{ submission[0] }}"
+              value="/submissions?submission={{ submission[0] }}"
       >
           {{ submission[0] }} ({{ submission[1]}})
       </option>
